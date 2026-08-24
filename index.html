@@ -155,9 +155,11 @@
     footer { font-size: 10px; padding: 5px 12px; }
   }
 
+  /* ★2026-08-24：論点の文言が長くなって8行のうち数行が2行に折り返し、
+     右帯が1画面（620px）を25pxはみ出した。行の上下と行間を詰めて戻す。 */
   .faq-row {
     display: flex; align-items: flex-start; gap: 8px;
-    font-size: 12px; padding: 5px 0; cursor: pointer; line-height: 1.5;
+    font-size: 12px; padding: 3px 0; cursor: pointer; line-height: 1.42;
     border-bottom: 1px dotted var(--line);
   }
   .faq-row:hover { background: #f7f8f9; }
@@ -175,9 +177,12 @@
     padding: 0 4px; margin-right: 5px; white-space: nowrap;
   }
   .gauge-title { font-size: 13px; font-weight: 700; }
-  #gauge-value { font-size: 26px; font-weight: 700; margin: 2px 0 8px; }
+  #gauge-value { font-size: 26px; font-weight: 700; margin: 2px 0 7px; }
   #gauge-value .starmark { color: var(--accent); font-size: 15px; margin-right: 4px; }
-  .gauge-track-wrap { position: relative; padding-bottom: 16px; }
+  /* ★目盛りの数字はバーの「上」に置く（2026-08-24 本人指摘）。
+     下に置くと、すぐ下の「2/3まで あと◯棟」の行と重なって読めなかった。
+     上に 26px の余白を作り、ラベルの下端をバーの上辺にそろえる。 */
+  .gauge-track-wrap { position: relative; padding-top: 26px; padding-bottom: 2px; }
   .gauge-track { position: relative; height: 8px; background: #e8ebed; border-radius: 4px; }
   .gauge-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--accent); border-radius: 4px; }
   .gauge-dot {
@@ -200,7 +205,11 @@
   .who.wC::before { content: "\1F465"; }                  /* 👥 */
   .who.wS::before { content: "\1F3E2"; }                  /* 🏢 */
   .gauge-tick { position: absolute; top: -3px; width: 1px; height: 14px; background: #9aa3ab; }
-  .gauge-tick-label { position: absolute; top: 12px; font-size: 10px; color: var(--sub); transform: translateX(-50%); }
+  /* bottom 基準にすると、1行の「0」「100%」と3段の分数が、下端でそろってバーに乗る */
+  .gauge-tick-label {
+    position: absolute; bottom: 12px; font-size: 10px; color: var(--sub);
+    transform: translateX(-50%); white-space: nowrap;
+  }
   /* ★2/3・3/4・4/5 は 75% と 80% が5%しか離れておらず、「3/4」「4/5」と横書きすると重なる。
      分数を縦に組む（分子／罫／分母）と幅が約18px→8pxになり、重ならない。 */
   .frac { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.02; }
@@ -209,7 +218,7 @@
   /* 両端はラベルが枠から出ないように寄せる */
   .gauge-tick-label.lft { transform: translateX(0); }
   .gauge-tick-label.rgt { transform: translateX(-100%); }
-  #threshold-list { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  #threshold-list { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
   .th-row { display: flex; gap: 4px; font-size: 12px; margin: 1px 0; }
   .th-row .lbl { color: var(--sub); }
   .th-row .val { font-variant-numeric: tabular-nums; }
