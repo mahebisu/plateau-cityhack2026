@@ -675,7 +675,8 @@
     <span class="url" id="pc-gate-url">—</span>
     <button class="primary" id="pc-gate-copy">URLをコピー</button>
     <button id="pc-gate-ignore">このまま開く</button>
-    <div class="note">「このまま開く」を押すと表示はできますが、<b>操作は保証しません</b>。</div>
+    <div class="note">この画面が出ているあいだ、<b>地図データはまだ読み込んでいません</b>（約3.7MB）。<br>
+      「このまま開く」を押すと読み込みを始めます。表示はできますが、<b>操作は保証しません</b>。</div>
   </div>
 </div>
 
@@ -3375,14 +3376,25 @@ document.querySelectorAll("#layer-toggle button").forEach(btn => {
    ノートPCの1366pxで誤爆しないように、幅の下限を分けてある。
    ★一度「このまま開く」を押したら、以後は出さない（大型タッチ端末を締め出さない）。
    ========================================================================= */
+/* ★2026-08-24：ゲートが出ているあいだは boot() を走らせない。
+   会場でDiscordのリンクを一斉に踏まれたとき、スマホが3.7MBを落としてから
+   「PCで開いてください」を見るのは、回線の無駄でしかない。
+   ゲートが外れた瞬間（＝「このまま開く」／画面が広がった）に初めて読み始める。 */
+let bootStarted = false;
+let gateBlocking = false;                      // ゲートが出ている＝まだ読み込まない
+function startBoot() { if (bootStarted) return; bootStarted = true; boot(); }
+
 (function () {
   const gate = document.getElementById("pc-gate");
   let dismissed = false;
   const coarse = () => window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   const tooSmall = () => window.innerWidth < 1000 || (coarse() && window.innerWidth < 1280);
   function check() {
-    if (dismissed) { gate.classList.remove("on"); return; }
-    gate.classList.toggle("on", tooSmall());
+    if (dismissed) { gateBlocking = false; gate.classList.remove("on"); startBoot(); return; }
+    const blocked = tooSmall();
+    gateBlocking = blocked;
+    gate.classList.toggle("on", blocked);
+    if (!blocked) startBoot();          // 画面が広がったら、その時点で読み始める
   }
   document.getElementById("pc-gate-url").textContent = location.href;
   document.getElementById("pc-gate-copy").addEventListener("click", () => {
@@ -3398,7 +3410,7 @@ document.querySelectorAll("#layer-toggle button").forEach(btn => {
     }
   });
   document.getElementById("pc-gate-ignore").addEventListener("click", () => {
-    dismissed = true; gate.classList.remove("on");
+    dismissed = true; gateBlocking = false; gate.classList.remove("on"); startBoot();
   });
   check();
   window.addEventListener("resize", check);
@@ -3504,7 +3516,7 @@ window.IndexEmbed = {
   sync();
 })();
 
-boot();
+if (!gateBlocking) startBoot();    // ゲートが出ているときは、ゲートが外れてから読む
 </script>
 
 </body>
