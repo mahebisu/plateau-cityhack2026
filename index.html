@@ -1,0 +1,3466 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>合意形成の風洞実験</title>
+<!-- MapLibre GL JS v5.24.0（BSD-3-Clause）をローカルに同梱。
+     会場でネットワークが落ちてもデモが起動するようにするため、CDNは使わない。 -->
+<link href="vendor/maplibre-gl.css" rel="stylesheet">
+<script src="vendor/maplibre-gl.js"></script>
+<style>
+  :root {
+    --ink: #1f2328;
+    --sub: #5b6470;
+    --line: #d9dde1;
+    --bg: #f5f6f7;
+    --panel-bg: #ffffff;
+    --accent: #2b6cb0;
+    --red: #c0392b;
+    --green: #2e7d4f;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  #app { display: flex; flex-direction: column; height: 100%; }
+  /* ★1366×768でも1段に収める。旧設定では合計1,622px必要で2段になっていた
+     （＝地図の高さを57px food）。詰めた内訳＝余白・字送り・見出しの副題（2026-08-23 本人指摘） */
+  header {
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 14px;
+    padding: 8px 14px;
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 700; white-space: nowrap; }
+  header h1 small { font-weight: 400; color: var(--sub); font-size: 11.5px; margin-left: 7px; }
+  /* 幅が足りない画面では副題を畳む（タイトル自体は残す） */
+  @media (max-width: 1560px) { header h1 small { display: none; } }
+  /* ★対象範囲の棟数。2026-08-24 に上帯の右端から下帯の左端へ移した。押すと #area-modal が開く */
+  #head-stat {
+    flex: 0 0 auto; display: flex; align-items: baseline; gap: 4px;
+    font-size: 11.5px; color: var(--sub); white-space: nowrap; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 5px; padding: 4px 9px; background: #fff;
+  }
+  #head-stat:hover { background: #f0f2f4; }
+  #head-stat b { font-size: 16px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  #head-stat .hs-more { font-size: 12px; }
+  /* ★下帯へ移して幅に余裕ができたので、駅名を畳む閾値を 1560px → 900px に下げた（2026-08-24）。
+     1366px でも「大宮駅・さいたま新都心駅 徒歩15分圏」がそのまま出る。 */
+  @media (max-width: 900px) {
+    #head-stat .hs-long, #head-stat .hs-label { display: none; }
+    #head-stat { padding: 4px 7px; gap: 3px; }
+  }
+  .btn-group { display: flex; gap: 4px; align-items: center; }
+  .btn-group button {
+    font-family: inherit; font-size: 12px; padding: 6px 9px;
+    border: 1px solid var(--line); background: #fff; color: var(--ink);
+    border-radius: 5px; cursor: pointer; white-space: nowrap;
+  }
+  .btn-group button:hover { background: #f0f2f4; }
+  .btn-group button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn-group .lbl { font-size: 11px; color: var(--sub); align-self: center; margin-right: 2px; }
+  /* 丁目名。★スタイルに glyphs を持っていない（＝フォントを外部から取れない）ので
+     symbol レイヤは使えない。HTMLマーカーで描く＝オフラインでも確実に出る。 */
+  .chome {
+    font-size: 11px; font-weight: 700; color: #33414d; white-space: nowrap;
+    text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
+    pointer-events: none; letter-spacing: .02em;
+  }
+  .chome.sm { font-size: 10px; color: #5d6b78; font-weight: 600; }
+  #main { flex: 1 1 auto; display: flex; min-height: 0; }
+  #map { flex: 1 1 auto; min-width: 0; position: relative; background: #eef0f2; }
+  #side {
+    flex: 0 0 360px; width: 360px; background: var(--panel-bg);
+    border-left: 1px solid var(--line);
+    display: flex; flex-direction: column; overflow-y: auto;
+    padding: 16px 18px 20px; gap: 14px;
+  }
+  .stat-block { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  .stat-block .label { font-size: 12px; color: var(--sub); margin-bottom: 4px; }
+  .stat-block .numbers { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
+  .stat-block .numbers .unit { font-size: 14px; font-weight: 400; color: var(--sub); margin: 0 10px 0 3px; }
+  .stat-block .numbers .sm { font-size: 20px; }
+  .section-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+  .legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin: 3px 0; }
+  .legend-row .sw { width: 16px; height: 12px; border-radius: 2px; border: 1px solid rgba(0,0,0,.15); flex: 0 0 auto; }
+  .legend-row .n { color: var(--sub); margin-left: auto; font-variant-numeric: tabular-nums; }
+  .kv { display: flex; justify-content: space-between; font-size: 12px; margin: 3px 0; }
+  .kv .k { color: var(--sub); }
+  .kv .v { font-variant-numeric: tabular-nums; }
+  .note { font-size: 11px; color: var(--sub); line-height: 1.6; }
+  /* ★下帯＝対象範囲の棟数 ＋ 出所の1行 ＋ ⓘ。棟数は 2026-08-24 に上帯から移した。
+     #footer が伸び縮みして、棟数を左端・ⓘを右端に寄せる。 */
+  footer {
+    flex: 0 0 auto; padding: 5px 14px; font-size: 11px; color: var(--sub);
+    background: #fff; border-top: 1px solid var(--line);
+    display: flex; align-items: center; gap: 14px;
+  }
+  #footer { flex: 1 1 auto; min-width: 0; }
+  /* ★下帯は短く。データの出所はここからポップアップで出す（2026-08-23 本人指示） */
+  #src-chip {
+    flex: 0 0 auto; cursor: pointer; color: var(--accent); font-weight: 700;
+    border: 1px solid #cfe0f0; background: #eef5fb; border-radius: 4px; padding: 2px 9px;
+  }
+  #src-chip:hover { background: #e4eff9; }
+  #method-chip {
+    margin-top: 8px; cursor: pointer; font-size: 11px; color: var(--accent); font-weight: 700;
+    border: 1px solid #cfe0f0; background: #eef5fb; border-radius: 4px; padding: 4px 9px; display: inline-block;
+  }
+  #method-chip:hover { background: #e4eff9; }
+  #loading {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(245,246,247,.92); font-size: 14px; color: var(--sub); z-index: 5;
+  }
+  #hover-info {
+    position: absolute; left: 12px; bottom: 12px; z-index: 4;
+    background: rgba(255,255,255,.94); border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 12px; font-size: 12px; min-width: 200px; display: none;
+  }
+  .maplibregl-popup-content { font-family: inherit; font-size: 12px; padding: 10px 12px; }
+  .maplibregl-popup-content h3 { margin: 0 0 6px; font-size: 13px; }
+  .popup-row { display: flex; justify-content: space-between; gap: 14px; }
+  .popup-row .k { color: var(--sub); }
+  .popup-note { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); color: var(--sub); }
+
+  /* ---- 狭い画面（Discordから踏まれるスマホ）---- */
+  #side-handle { display: none; }
+  @media (max-width: 760px) {
+    header { gap: 10px; padding: 8px 12px; }
+    header h1 { font-size: 14px; width: 100%; }
+    header h1 small { display: block; margin: 2px 0 0; }
+    .btn-group button { font-size: 12px; padding: 6px 10px; }
+    #main { flex-direction: column; }
+    #map { flex: 1 1 auto; min-height: 0; }
+    #side {
+      flex: 0 0 auto; width: 100%; max-height: 46vh;
+      border-left: none; border-top: 1px solid var(--line);
+      padding: 10px 14px 16px;
+    }
+    #side.collapsed { max-height: 0; padding-top: 0; padding-bottom: 0; overflow: hidden; border-top: none; }
+    #side-handle {
+      display: flex; align-items: center; justify-content: space-between;
+      flex: 0 0 auto; padding: 8px 14px; background: #fff;
+      border-top: 1px solid var(--line); font-size: 12px; cursor: pointer;
+      -webkit-user-select: none; user-select: none;
+    }
+    #side-handle .caret { color: var(--sub); }
+    #hover-info { display: none !important; }
+    .stat-block .numbers { font-size: 24px; }
+    footer { font-size: 10px; padding: 5px 12px; }
+  }
+
+  .faq-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 12px; padding: 5px 0; cursor: pointer; line-height: 1.5;
+    border-bottom: 1px dotted var(--line);
+  }
+  .faq-row:hover { background: #f7f8f9; }
+  .faq-row .box {
+    flex: 0 0 auto; width: 15px; height: 15px; margin-top: 1px;
+    border: 1px solid var(--line); border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #fff; background: #fff;
+  }
+  .faq-row.answered .box { background: var(--green); border-color: var(--green); }
+  .faq-row.answered { color: var(--sub); }
+  .faq-row .txt-id {
+    display: inline-block; font-size: 10px; color: var(--sub);
+    border: 1px solid var(--line); border-radius: 3px;
+    padding: 0 4px; margin-right: 5px; white-space: nowrap;
+  }
+  .gauge-title { font-size: 13px; font-weight: 700; }
+  #gauge-value { font-size: 26px; font-weight: 700; margin: 2px 0 8px; }
+  #gauge-value .starmark { color: var(--accent); font-size: 15px; margin-right: 4px; }
+  .gauge-track-wrap { position: relative; padding-bottom: 16px; }
+  .gauge-track { position: relative; height: 8px; background: #e8ebed; border-radius: 4px; }
+  .gauge-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--accent); border-radius: 4px; }
+  .gauge-dot {
+    position: absolute; top: -3px; width: 14px; height: 14px; margin-left: -7px;
+    background: #fff; border: 2px solid var(--accent); border-radius: 50%;
+  }
+  /* ★説明対象の層に絵文字を付ける。★差し替えるならこの4行だけ直せばよい（全箇所に効く）。
+       近いほど「個」・遠いほど「群」＝条例の建て付けと対応させている。
+         🧍 近隣住民ア … 敷地境界15m かつ 外壁50m。すぐ隣に立っている1人
+         🧑‍🤝‍🧑 近隣住民イ … 高さの2倍 かつ 冬至日の日影。影のかかる範囲の人たち
+         👥 周辺住民   … 求められたら説明（第9条2項）。もっと外側の群
+         🏢 当事者     … 人ではなく、変更で既存不適格になる棟そのもの
+     文字サイズに依らず幅を固定して行頭を揃える。絵文字フォントは端末側のものを使う
+     （外部フォントを取りに行かない＝会場のネットが落ちても出る）。 */
+  .who { display: inline-block; width: 1.35em; font-size: 1.08em; line-height: 1;
+         text-align: center; margin-right: 1px;
+         font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif; }
+  .who.wA::before { content: "\1F9CD"; }                  /* 🧍 */
+  .who.wB::before { content: "\1F9D1\200D\1F91D\200D\1F9D1"; }  /* 🧑‍🤝‍🧑 */
+  .who.wC::before { content: "\1F465"; }                  /* 👥 */
+  .who.wS::before { content: "\1F3E2"; }                  /* 🏢 */
+  .gauge-tick { position: absolute; top: -3px; width: 1px; height: 14px; background: #9aa3ab; }
+  .gauge-tick-label { position: absolute; top: 12px; font-size: 10px; color: var(--sub); transform: translateX(-50%); }
+  /* ★2/3・3/4・4/5 は 75% と 80% が5%しか離れておらず、「3/4」「4/5」と横書きすると重なる。
+     分数を縦に組む（分子／罫／分母）と幅が約18px→8pxになり、重ならない。 */
+  .frac { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.02; }
+  .frac b { font-weight: 600; font-size: 9.5px; }
+  .frac i { display: block; width: 8px; height: 1px; background: currentColor; margin: 1px 0; }
+  /* 両端はラベルが枠から出ないように寄せる */
+  .gauge-tick-label.lft { transform: translateX(0); }
+  .gauge-tick-label.rgt { transform: translateX(-100%); }
+  #threshold-list { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .th-row { display: flex; gap: 4px; font-size: 12px; margin: 1px 0; }
+  .th-row .lbl { color: var(--sub); }
+  .th-row .val { font-variant-numeric: tabular-nums; }
+  .th-row .val.done { color: var(--green); font-weight: 700; }
+
+  #map-legend {
+    position: absolute; left: 12px; top: 12px; z-index: 4;
+    background: rgba(255,255,255,.95); border: 1px solid var(--line);
+    border-radius: 6px; font-size: 11px; line-height: 1.45;
+    max-width: 268px; box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    /* ★画面からはみ出さないようにする。地図の高さから上下の余白を引いた分までで、
+       それを超えたら中身をスクロールさせる（2026-08-23）。 */
+    display: flex; flex-direction: column;
+    max-height: calc(100% - 24px);
+  }
+  #map-legend .legend-head {
+    flex: 0 0 auto; padding: 8px 11px 6px; border-bottom: 1px solid var(--line);
+    font-size: 11.5px; font-weight: 700; background: rgba(255,255,255,.97);
+    border-radius: 6px 6px 0 0;
+  }
+  #map-legend .legend-body { overflow-y: auto; padding: 8px 11px 10px; }
+  #map-legend h4 { margin: 0 0 5px; font-size: 11.5px; font-weight: 700; }
+  #map-legend h4:not(:first-child) { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
+  #map-legend .lg { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  #map-legend .sw { width: 15px; height: 10px; border-radius: 2px; flex: 0 0 auto; border: 1px solid rgba(0,0,0,.12); }
+  #map-legend .ln { width: 15px; height: 0; flex: 0 0 auto; border-top-width: 3px; border-top-style: solid; }
+  /* 動かす線の見本（黒白黒白＋両端の球）。地図の描き方と揃える */
+  #map-legend .rail {
+    width: 15px; height: 6px; flex: 0 0 auto; position: relative; background: #1f2328;
+    border-radius: 1px;
+    background-image: repeating-linear-gradient(90deg, #fff 0 3px, transparent 3px 6px);
+    background-clip: content-box; box-sizing: border-box; border-top: 1px solid #1f2328;
+    border-bottom: 1px solid #1f2328;
+  }
+  #map-legend .rail::before, #map-legend .rail::after {
+    content: ""; position: absolute; top: 50%; width: 5px; height: 5px; border-radius: 50%;
+    background: #1f2328; border: 1px solid #fff; transform: translateY(-50%);
+  }
+  #map-legend .rail::before { left: -3px; }
+  #map-legend .rail::after  { right: -3px; }
+  #map-legend .sub { color: var(--sub); }
+  #map-legend-note { color: var(--red); margin-top: 6px; display: block; }
+  #legend-toggle {
+    position: absolute; left: 12px; top: 12px; z-index: 5;
+    font-family: inherit; font-size: 11px; padding: 4px 9px; cursor: pointer;
+    border: 1px solid var(--line); background: rgba(255,255,255,.95); border-radius: 5px; display: none;
+  }
+  /* ★スマホ・タブレットで開かれたときの案内（2026-08-24 本人指示）。
+     この画面は PC・Chrome・マウス操作を前提に作ってある（2026-08-22 に確定した割り切り）。
+     黙って崩れるより、理由を出して PC に誘導する。★閉じることはできる（大型タッチ端末を締め出さない）。 */
+  #pc-gate {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    background: #1f2328; color: #fff; padding: 24px;
+    align-items: center; justify-content: center;
+  }
+  #pc-gate.on { display: flex; }
+  #pc-gate .box { max-width: 460px; line-height: 1.9; font-size: 14px; }
+  #pc-gate h2 { margin: 0 0 10px; font-size: 19px; }
+  #pc-gate p { margin: 0 0 12px; }
+  #pc-gate .why { color: #c8d2dc; font-size: 12.5px; }
+  #pc-gate .url {
+    display: block; margin: 14px 0; padding: 9px 11px; background: #2c3238;
+    border: 1px solid #4a545e; border-radius: 6px; font-size: 12px; word-break: break-all; color: #dfe7ee;
+  }
+  #pc-gate button {
+    font-family: inherit; font-size: 13px; padding: 8px 14px; border-radius: 6px; cursor: pointer;
+    border: 1px solid #4a545e; background: #2c3238; color: #fff; margin-right: 8px;
+  }
+  #pc-gate button.primary { background: #2b6cb0; border-color: #2b6cb0; }
+  #pc-gate button:hover { filter: brightness(1.15); }
+  #pc-gate .note { color: #8fa0b0; font-size: 11.5px; margin-top: 12px; }
+
+  /* ★凡例から納得率シミュレータを開くボタン */
+  #consent-open {
+    float: right; margin-right: 8px; cursor: pointer; font-weight: 700;
+    color: var(--accent); border: 1px solid #cfe0f0; background: #eef5fb;
+    border-radius: 4px; padding: 0 6px; font-size: 10.5px; line-height: 16px;
+  }
+  #consent-open:hover { background: #dbeaf7; }
+
+  /* ★納得率シミュレータのオーバーレイ。index は消さずに重ねるだけなので、
+     閉じると直前の状態（線の位置・色分け・チェック）がそのまま残る。 */
+  #consent-overlay {
+    position: fixed; inset: 0; z-index: 70; display: none;
+    flex-direction: column; background: rgba(20,24,28,.5);
+  }
+  #consent-overlay.open { display: flex; }
+  #co-bar {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+    padding: 7px 14px; background: #1f2328; color: #fff; font-size: 12px;
+  }
+  #co-bar b { font-size: 13px; }
+  #co-ctx { color: #c8d2dc; font-size: 11.5px; flex: 1 1 auto; min-width: 0; }
+  #co-close {
+    cursor: pointer; border: 1px solid #4a545e; border-radius: 5px;
+    padding: 3px 10px; background: #2c3238; white-space: nowrap;
+  }
+  #co-close:hover { background: #3b434b; }
+  #co-frame { flex: 1 1 auto; width: 100%; border: 0; background: #f4f7fa; }
+  #map-legend.hidden { display: none; }
+  #map-legend.hidden + #legend-toggle, #map-legend.hidden ~ #legend-toggle { display: block; }
+
+  .lm {
+    display: flex; align-items: center; gap: 6px; cursor: default;
+    transform: translate(-8px, -50%); white-space: nowrap;
+  }
+  /* 線をドラッグできることを知らせる取っ手。触るまで脈打たせる */
+  /* ★MapLibreのMarkerは要素そのものの transform で位置を決める。
+     CSSアニメーションは inline style より優先されるので、脈打つ transform を
+     マーカー要素に直接当てると位置が飛ぶ。必ず内側の要素に当てる。 */
+  /* ★position は absolute のまま。relative にすると MapLibre が付ける absolute を
+     打ち消してしまい、幅が地図いっぱい（1052px）に広がる（2026-08-23 実測）。
+     矢印の絶対配置の基準はこの要素自身で足りる。 */
+  .grabwrap { cursor: grab; position: absolute; width: max-content; }
+  /* 矢印は線の法線方向（＝実際に動く向き）に回す。地図を回しても追従させる。 */
+  .grabaxis { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+  .grabaxis .ar {
+    position: absolute; left: -9px; font-size: 15px; line-height: 1;
+    color: #1f2328; text-shadow: 0 0 3px #fff, 0 0 6px #fff, 0 1px 2px rgba(0,0,0,.4);
+    animation: arrowbob 1.5s ease-in-out infinite;
+  }
+  .grabaxis .a1 { top: -40px; }
+  .grabaxis .a2 { top: 25px; }
+  .grabwrap.used .grabaxis { display: none; }
+  @keyframes arrowbob {
+    0%, 100% { opacity: .45; }
+    50%      { opacity: 1; }
+  }
+  .grabme {
+    display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; cursor: grab;
+    background: #1f2328; color: #fff; border-radius: 999px;
+    padding: 5px 11px 5px 9px; font-size: 11.5px; font-weight: 700;
+    box-shadow: 0 2px 8px rgba(0,0,0,.35); border: 2px solid #fff;
+    animation: grabpulse 1.5s ease-in-out infinite;
+  }
+  .grabme .hand { font-size: 14px; line-height: 1; }
+  .grabme .arw { opacity: .75; letter-spacing: -1px; }
+  .grabme.used { animation: none; background: rgba(31,35,40,.72); font-weight: 400; padding: 3px 9px; font-size: 10.5px; }
+  .grabme.used .hand { font-size: 12px; }
+  @keyframes grabpulse {
+    0%, 100% { transform: scale(1);    box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+    50%      { transform: scale(1.08); box-shadow: 0 3px 16px rgba(31,35,40,.55); }
+  }
+  .lm .dot.sq { border-radius: 3px; }   /* 建物（新庁舎）＝四角。駅＝丸 と区別する */
+  .lm .dot {
+    width: 13px; height: 13px; border-radius: 50%;
+    border: 3px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.45); flex: 0 0 auto;
+  }
+  .lm .tx {
+    background: rgba(255,255,255,.94); border: 1px solid rgba(0,0,0,.18);
+    border-radius: 4px; padding: 2px 7px; font-size: 12px; font-weight: 700;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2); line-height: 1.35;
+  }
+  .lm .tx small { display: block; font-weight: 400; font-size: 10px; color: var(--sub); }
+
+  #jourei-chip {
+    display: inline-block; font-size: 11px; line-height: 1.4;
+    border: 1px solid var(--accent); color: var(--accent);
+    background: #f2f7fc; border-radius: 4px; padding: 3px 8px; cursor: pointer;
+    margin-bottom: 6px;
+  }
+  #jourei-chip:hover { background: #e4eff9; }
+  #shincho-chip {
+    display: inline-block; font-size: 11px; line-height: 1.4; margin: 0 0 8px;
+    border: 1px solid #1a1d21; color: #1a1d21; background: #f4f5f6;
+    border-radius: 4px; padding: 3px 8px; cursor: pointer;
+  }
+  #shincho-chip:hover { background: #e8eaec; }
+  #used-chip {
+    display: inline-block; font-size: 11px; line-height: 1.4; margin-top: 6px;
+    border: 1px solid var(--accent); color: var(--accent); background: #f2f7fc;
+    border-radius: 4px; padding: 3px 8px; cursor: pointer;
+  }
+  #used-chip:hover { background: #e4eff9; }
+  .gauge-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #gauge-chip {
+    flex: 0 0 auto; cursor: pointer; font-size: 10px; color: var(--accent); font-weight: 700;
+    border: 1px solid #cfe0f0; background: #eef5fb; border-radius: 4px; padding: 2px 7px; white-space: nowrap;
+  }
+  #gauge-chip:hover { background: #e4eff9; }
+  #shincho-btn {
+    display: block; width: 100%; font-family: inherit; font-size: 12px; font-weight: 700;
+    margin: 6px 0 8px; padding: 7px 10px; cursor: pointer; border-radius: 5px;
+    border: 1px solid #1a1d21; color: #1a1d21; background: #f4f5f6;
+  }
+  #shincho-btn:hover { background: #ffece0; }
+  #shincho-btn.active { background: #1a1d21; color: #fff; }
+  #src-modal, #method-modal {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(20,24,28,.45); align-items: center; justify-content: center; padding: 24px;
+  }
+  #src-modal.open, #method-modal.open { display: flex; }
+  #used-modal {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(20,24,28,.45); align-items: center; justify-content: center; padding: 24px;
+  }
+  #used-modal.open { display: flex; }
+  #gauge-modal {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(20,24,28,.45); align-items: center; justify-content: center; padding: 24px;
+  }
+  #gauge-modal.open { display: flex; }
+  #shincho-modal {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(20,24,28,.45); align-items: center; justify-content: center; padding: 24px;
+  }
+  #shincho-modal.open { display: flex; }
+  #area-modal {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(20,24,28,.45); align-items: center; justify-content: center; padding: 24px;
+  }
+  #area-modal.open { display: flex; }
+  #jourei-modal {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(20,24,28,.45); align-items: center; justify-content: center; padding: 24px;
+  }
+  #jourei-modal.open { display: flex; }
+  #used-box, #shincho-box, #area-box, #jourei-box, #src-box, #method-box, #gauge-box {
+    background: #fff; border-radius: 8px; max-width: 700px; width: 100%;
+    max-height: 84vh; overflow-y: auto; padding: 20px 24px; font-size: 13px; line-height: 1.75;
+    box-shadow: 0 8px 32px rgba(0,0,0,.28);
+  }
+  #used-box h3, #shincho-box h3, #area-box h3, #jourei-box h3, #src-box h3, #method-box h3 { margin: 0 0 4px; font-size: 15px; }
+  #used-box h4, #shincho-box h4, #area-box h4, #jourei-box h4, #src-box h4, #method-box h4 { margin: 16px 0 5px; font-size: 13px; border-left: 3px solid var(--accent); padding-left: 7px; }
+  #used-box .meta, #shincho-box .meta, #area-box .meta, #jourei-box .meta, #src-box .meta, #method-box .meta { color: var(--sub); font-size: 11px; margin-bottom: 10px; }
+  #used-box blockquote,
+  #jourei-box blockquote {
+    margin: 6px 0; padding: 7px 11px; background: #f5f6f7;
+    border-left: 3px solid var(--line); font-size: 12px; color: #333;
+  }
+  #used-box table, #shincho-box table, #area-box table, #jourei-box table, #src-box table, #method-box table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 6px 0; }
+  #used-box th, #used-box td, #shincho-box th, #shincho-box td, #area-box th, #area-box td, #jourei-box th, #jourei-box td, #src-box th, #src-box td, #method-box th, #method-box td { border: 1px solid var(--line); padding: 4px 7px; text-align: left; vertical-align: top; }
+  #used-box th, #shincho-box th, #area-box th, #jourei-box th, #src-box th, #method-box th { background: #f5f6f7; }
+  #used-close, #shincho-close, #area-close, #jourei-close, #src-close, #method-close, #koudo-close {
+    float: right; cursor: pointer; color: var(--sub); font-size: 18px; line-height: 1;
+  }
+
+  /* ---- 高度地区（絶対高さの上限）を見えるようにする（2026-08-24 本人指示） ----
+     データは最初から持っていた（koudo_omiya.geojson の hmax＝15 または 20）。
+     画面には紫の破線しか出しておらず「何mなのか」が読めなかったので、
+     ①面を上限の高さで塗り分け ②区画の上に「15ｍ」「20ｍ」のラベル ③一覧のモーダル を足した。 */
+  #koudo-modal {
+    position: fixed; inset: 0; z-index: 40; display: none;
+    background: rgba(20,24,28,.45); align-items: center; justify-content: center; padding: 24px;
+  }
+  #koudo-modal.open { display: flex; }
+  #koudo-box {
+    background: #fff; border-radius: 8px; max-width: 700px; width: 100%;
+    max-height: 84vh; overflow-y: auto; padding: 20px 24px; font-size: 13px; line-height: 1.75;
+    box-shadow: 0 8px 32px rgba(0,0,0,.28);
+  }
+  #koudo-box h3 { margin: 0 0 4px; font-size: 15px; }
+  #koudo-box h4 { margin: 16px 0 5px; font-size: 13px; border-left: 3px solid var(--accent); padding-left: 7px; }
+  #koudo-box .meta { color: var(--sub); font-size: 11px; margin-bottom: 10px; }
+  #koudo-box table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 6px 0; }
+  #koudo-box th, #koudo-box td { border: 1px solid var(--line); padding: 4px 7px; text-align: left; vertical-align: top; }
+  #koudo-box th { background: #f5f6f7; }
+  #koudo-chip {
+    display: inline-block; cursor: pointer; color: #5e3fa0; border: 1px solid #cbb8e6;
+    background: #f3edfb; border-radius: 4px; padding: 2px 7px; font-size: 10.5px; margin-top: 2px;
+  }
+  #koudo-chip:hover { background: #e9dff7; }
+  /* 区画の上に置く上限値のラベル。MapLibreの symbol は使えない（glyphs を持たないスタイル）ので
+     HTMLマーカーで描く。丁目名（.chome）と同じ方式。 */
+  .koudo-lab {
+    font-size: 10.5px; font-weight: 700; color: #fff; white-space: nowrap;
+    background: rgba(94,63,160,.88); border: 1px solid #fff; border-radius: 9px;
+    padding: 1px 7px; letter-spacing: .02em; pointer-events: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  .koudo-lab.h20 { background: rgba(160,123,212,.92); }
+  /* 凡例の板の見本。地図と同じ「半透明の塗り＋点線の縁」 */
+  /* ⚠ #map-legend .sw（id+class）の方が詳細度が高いので、必ず #map-legend を付けて上書きする */
+  #map-legend .sw.slab15, #map-legend .sw.slab20 {
+    background: currentColor; opacity: .45; border: 1px dotted currentColor;
+  }
+  #map-legend .sw.slab15 { color: #5e3fa0; }
+  #map-legend .sw.slab20 { color: #a07bd4; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>合意形成の風洞実験<small>説明会を、開く前に開く。</small></h1>
+    <div class="btn-group" id="color-mode">
+      <span class="lbl">色分け</span>
+      <!-- ★トグル。もう一度押すとOFF＝色分けなし（LOD2/LOD1の色分けは廃止・2026-08-23 本人指示） -->
+      <button class="active" data-mode="zone" title="ONで用途地域の色。もう一度押すと色分けなし。用途地域境のレバーを動かすと自動でOFFになります（線を動かしたときの棟の色を隠さないため）">用途地域</button>
+      <button data-mode="used" title="容積をどれだけ使い切っているか。参考値です。もう一度押すと色分けなし。用途地域境のレバーを動かすと自動でOFFになります">容積消化率</button>
+    </div>
+    <div class="btn-group" id="layer-toggle">
+      <span class="lbl">重ね</span>
+      <button class="active" data-layer="zones" title="用途地域の区画（urf:UseDistrict）の面と境界。さいたま市全域の外周線は常に出ます">用途地域の区画</button>
+      <button class="active" data-layer="base" title="国土地理院の淡色地図タイル">地理院地図</button>
+      <button class="active" data-layer="chome" title="丁目までの地名（e-Stat 令和2年国勢調査 小地域の重心）。ズームを引くと大きい丁目だけ残ります">丁目名</button>
+      <button data-layer="roads" title="PLATEAU udx/tran の道路（tran:Road）。初回は6.5MBを読み込みます">道路</button>
+      <button data-layer="koudo" title="絶対高さの上限がかかる区域そのもの（この範囲に13区画＝20ｍ地区11・15ｍ地区2）。上限の高さに半透明の板（厚さ50cm・上端が上限）を浮かせます。★レバーを動かしても変わりません。棟ごとの板は「20mの天井」の方">高度地区</button>
+      <button data-layer="ceiling" title="★「高度地区」との違い：あちらは区域ぜんぶ（13区画・静止）。こちらは棟ごとの板で、線を動かすと商業側になった棟から消えます（規制が外れる）。上限の出どころは同じ高度地区です">20mの天井</button>
+      <button class="active" data-layer="blink" title="未回答の論点が残っている棟を点滅させます">未充足を点滅</button>
+    </div>
+    <div class="btn-group" id="preset">
+      <span class="lbl">用途地域境の位置</span>
+      <button class="active" data-offset="0">現行</button>
+      <button data-offset="-60">商業を60m後退</button>
+      <button data-offset="60">商業を60m拡大</button>
+    </div>
+  </header>
+  <div id="main">
+    <div id="map">
+      <div id="loading">実データを読み込んでいます…</div>
+      <div id="map-legend">
+        <div class="legend-head">線を動かしたときの色
+          <span class="sub" style="font-weight:400;cursor:pointer;float:right" id="legend-close">×</span>
+          <!-- ★ここから納得率シミュレータ（consent.html）を重ねて開く（2026-08-24 本人指示） -->
+          <span id="consent-open" title="いまの用途地域境の位置と論点のチェックを渡して、納得率シミュレータを画面に重ねて開きます">⤢ 納得率</span>
+        </div>
+        <div class="legend-body">
+        <div class="lg"><span class="rail"></span><span><b>黒白の線</b>＝いま動かしている線<span class="sub">（両端の●まで。掴んで動かせます）</span></span></div>
+        <!-- ★凡例から外した3行（2026-08-24 本人指示）＝「灰の破線＝もとの線（現行）」
+             「黄土の帯＝第二種住居地域に戻る範囲」「赤の帯＝商業地域になる範囲」。
+             帯の色は用途地域の色を濃くしたものなので、凡例が無くても地図から読める。
+             描画そのものは残っている（the-line-orig / the-band-fill / the-band-line）。 -->
+        <div class="lg"><span class="sw" style="background:#b8262c"></span><span><b>赤い棟</b>＝高さ20mの上限を超える（既存不適格）</span></div>
+        <div class="lg"><span class="sw" style="background:#b8262c;opacity:.85"></span><span>棟の上の赤い箱＝<b>20mを超えている部分</b></span></div>
+        <div class="lg"><span class="sw" style="background:#8fa3b0"></span><span>灰青の棟＝外れたが上限内</span></div>
+        <div class="lg"><span class="sw" style="background:#2e7d4f"></span><span>緑の棟＝線を越えた（高さの上限が外れる）</span></div>
+        <div class="lg"><span class="sw" style="background:#2e7d4f;opacity:.35"></span><span>緑の半透明＝<b>許容延床1.50倍ぶんの余地</b></span></div>
+
+        <h4>条例の説明対象（棟をクリック）</h4>
+        <div class="lg"><span class="ln" style="border-top-color:#b8262c"></span><span><span class="who wA"></span><b>近隣住民ア</b>＝敷地から15m以内 <b>かつ</b> 外壁から50m以内<span class="sub">（敷地境界は外周で代用）</span></span></div>
+        <div class="lg"><span class="ln" style="border-top-color:#e08a2c"></span><span><span class="who wB"></span><b>近隣住民イ</b>＝外壁から高さの2倍以内 <b>かつ</b> 冬至日の日影<span class="sub">（商業地域・工業専用地域は除く）</span></span></div>
+        <div class="lg"><span class="ln" style="border-top-color:#2b6cb0"></span><span><span class="who wC"></span><b>周辺住民</b>＝近隣住民以外で、いずれかにかかる<span class="sub">（求められたら説明・第9条2項）</span></span></div>
+        <div class="lg"><span class="sw" style="background:#3b4a5a;opacity:.3"></span><span>灰の面＝冬至日 真太陽時9〜15時の影<span class="sub">。1時間ごと7時刻ぶんを重ねているので、<b>一日中影になるところほど濃い</b>。細い線は各時刻の輪郭（平均地盤面＋4mの水平面／低層住専は+1.5m）</span></span></div>
+
+        <div class="lg"><span class="sw" style="background:#7b4ea8;opacity:.6"></span><span>濃い紫の板＝<b>その棟にかかっている絶対高さの天井</b>。線を越えて商業側になると消える<span class="sub">＝規制が外れる。<b>「高度地区」との違いは、あちらが区域ぜんぶで動かないのに対し、こちらは棟ごとで線と一緒に動くこと。上限の出どころはどちらも高度地区</b></span></span></div>
+
+        <div class="lg"><span class="sw" style="background:#1a1d21"></span><span><b>黒い棟</b>＝<b>さいたま市 新庁舎</b>（基本設計・最高94m）<span class="sub">。用途地域の色ではない。右パネルのボタンで消せる</span></span></div>
+
+        <div class="lg"><span class="sw" style="background:#f2c200"></span><span><b>黄色く点滅</b>＝<b>まだ答えていない論点が残っている棟</b><span class="sub">。「準備する想定回答」にチェックを入れると点滅が止まる＝説明充足率が上がる</span></span></div>
+
+        <h4>重ねレイヤ</h4>
+        <div class="lg"><span class="sw slab15"></span><span><b>高度地区（15ｍ地区）</b>＝絶対高さの上限 <b>15m</b><span class="sub">。市全域39区画・5,367.2ha</span></span></div>
+        <div class="lg"><span class="sw slab20"></span><span><b>高度地区（20ｍ地区）</b>＝絶対高さの上限 <b>20m</b><span class="sub">。市全域35区画・2,512.1ha。<b>この線の住居側はこれ</b></span></span></div>
+        <div class="lg"><span class="sw" style="background:transparent;border:0"></span><span>★紫の板は<b>地面ではなく、その上限の高さに浮いています</b>（厚さ50cm・上端が上限）。<b>板を突き抜けている棟＝上限を超えている棟</b><span class="sub">。商業側は指定なし＝上限が無いので板が出ません</span></span></div>
+        <div class="lg"><span class="ln" style="border-top-color:#2f3b45;border-top-width:2px"></span><span><b>さいたま市の外周</b>（常時表示）<span class="sub">。PLATEAU <code>urf:UrbanPlanningArea</code>（都市計画区域）を結合。218.09km²＝公表市域217.43km²の100.3%</span></span></div>
+        <div class="lg"><span class="sw" style="background:transparent;border:0"></span><span id="koudo-chip">ⓘ 高度地区の一覧（何mなのか・告示番号）</span></div>
+        <span id="map-legend-note"></span>
+        </div>
+      </div>
+      <button id="legend-toggle">凡例</button>
+
+      <div id="hover-info"></div>
+    </div>
+    <div id="side-handle"><span id="side-handle-label">集計を表示</span><span class="caret">▲</span></div>
+    <div id="side">
+      <div id="gauge-block">
+        <div class="gauge-head"><span class="gauge-title">説明充足率</span><span id="gauge-chip" title="説明充足率の定義">ⓘ 説明充足率とは</span></div>
+        <div id="gauge-value"><span class="starmark">★</span><span id="gauge-pct">--</span>%</div>
+        <div class="gauge-track-wrap">
+          <div class="gauge-track">
+            <div class="gauge-fill" id="gauge-fill" style="width:0%"></div>
+            <div class="gauge-dot" id="gauge-dot" style="left:0%"></div>
+            <div class="gauge-tick" style="left:66.7%"></div>
+            <div class="gauge-tick" style="left:75%"></div>
+            <div class="gauge-tick" style="left:80%"></div>
+          </div>
+          <div class="gauge-tick-label lft" style="left:0%">0</div>
+          <div class="gauge-tick-label" style="left:66.7%" title="2/3"><span class="frac"><b>2</b><i></i><b>3</b></span></div>
+          <div class="gauge-tick-label" style="left:75%" title="3/4"><span class="frac"><b>3</b><i></i><b>4</b></span></div>
+          <div class="gauge-tick-label" style="left:80%" title="4/5"><span class="frac"><b>4</b><i></i><b>5</b></span></div>
+          <div class="gauge-tick-label rgt" style="left:100%">100%</div>
+        </div>
+        <div id="threshold-list"></div>
+      </div>
+
+      <div id="faq-wrap">
+        <div class="section-title">準備する想定回答</div>
+        <div class="note" style="margin:-2px 0 6px;">配る資料で答える論点にチェック。入れた分だけ上の充足率が上がります。</div>
+        <div id="faq-list"></div>
+      </div>
+
+      <div id="agg-result">
+        <div class="section-title">線を動かした結果の説明対象（合計）</div>
+        <div id="jourei-chip2" style="display:none"></div>
+        <div id="agg-stats"></div>
+      </div>
+
+      <div id="jou-result">
+        <div class="section-title">条例が定める説明対象</div>
+        <div id="jourei-chip">📖 さいたま市 紛争防止条例とは（クリックで説明）</div>
+        <button id="shincho-btn" type="button" class="active">↩ 現況に戻す（新庁舎を消す）</button>
+        <div id="shincho-chip">🏛 新庁舎の建築計画（クリックで説明）</div>
+        <div id="jou-stats"></div>
+      </div>
+
+      <div id="line-result">
+        <div class="section-title">線を動かした結果</div>
+        <div id="line-note" class="note" style="margin-bottom:8px;">
+          地図上の<b>太い線</b>をマウスでつまんで動かしてください。
+        </div>
+        <div id="line-stats"></div>
+      </div>
+
+      <div>
+        <div class="section-title" id="legend-title">用途地域</div>
+        <div id="legend"></div>
+      </div>
+
+      <div>
+        <div class="section-title">容積の使い切り（容積消化率）</div>
+        <div id="used-stats"></div>
+        <div id="used-chip">📐 容積消化率の計算式（クリックで説明）</div>
+      </div>
+
+    </div>
+  </div>
+  <!-- ★操作ボタンは上帯から下帯へ移した（2026-08-24 本人指示）。
+       上帯は「タイトル＋対象範囲の棟数」だけになり、1段に収まる。 -->
+  <!-- ★スマホ・タブレット向けの案内（2026-08-24 本人指示）。★動的に触るので <script> より前に置く。 -->
+<div id="pc-gate">
+  <div class="box">
+    <h2>この画面は、PCで開いてください</h2>
+    <p>合意形成の風洞実験は <b>PC の Chrome ＋ マウス操作</b>を前提に作っています。
+      スマートフォンやタブレットでは正しく動きません。</p>
+    <p class="why">理由：<b>3Dの地図の上で、用途地域の境界線を掴んで動かす</b>のが中心の操作です。
+      ドラッグの当たり判定をマウス前提で作っており、タッチには対応していません。
+      画面も横1,280px以上を想定しています。</p>
+    <span class="url" id="pc-gate-url">—</span>
+    <button class="primary" id="pc-gate-copy">URLをコピー</button>
+    <button id="pc-gate-ignore">このまま開く</button>
+    <div class="note">「このまま開く」を押すと表示はできますが、<b>操作は保証しません</b>。</div>
+  </div>
+</div>
+
+<!-- ★納得率シミュレータ（consent.html）を重ねて出す枠（2026-08-24 本人指示）。
+     iframe で読む＝2つのプロトタイプを別ファイルのまま保てる（dev/PROTOTYPES.md の切り分けを壊さない）。
+     ⚠ 動的に触るDOMは <script> より前に置く。 -->
+<div id="consent-overlay">
+  <div id="co-bar">
+    <b>納得率シミュレータ</b>
+    <span id="co-ctx">—</span>
+    <span id="co-close">× 地図に戻る</span>
+  </div>
+  <iframe id="co-frame" title="納得率シミュレータ"></iframe>
+</div>
+
+<!-- ★対象範囲の棟数（#head-stat）は 2026-08-24 に上帯の右端から下帯の左端へ移した（本人指示）。
+       操作ボタン（色分け／重ね／用途地域境の位置）は上帯のまま。
+       クリックで「対象範囲とランドマーク」のポップアップを開く。 -->
+  <footer>
+    <div id="head-stat" title="大宮駅・さいたま新都心駅から各1200m（徒歩15分）と2駅間の掃過帯。クリックで説明">
+      <span class="hs-long">大宮駅・さいたま新都心駅 </span><span class="hs-label">徒歩15分圏</span>
+      <b id="stat-count">--</b><span class="hs-unit">棟</span>
+      <span class="hs-more">🗺</span>
+    </div>
+    <span id="footer">読み込み中…</span><span id="src-chip">ⓘ データの出所と前提</span>
+  </footer>
+</div>
+
+<!-- データの出所。下帯右端の #src-chip をクリックで開く（2026-08-23 本人指示で下帯から退避）。 -->
+<div id="src-modal">
+  <div id="src-box">
+    <span id="src-close">×</span>
+    <h3>データの出所と前提</h3>
+    <div class="meta">この画面に出ている数字は、すべて下記の一次データを機械的に処理した結果です。</div>
+
+    <h4>建物・用途地域</h4>
+    <table>
+      <tr><th style="width:34%">3D都市モデル</th><td><b>Project PLATEAU さいたま市 2025年度版 CityGML</b>（国土交通省／2,516,277,839バイト）<br>
+        <code>udx/bldg</code> 建築物・<code>udx/urf</code> 都市計画決定情報（用途地域）</td></tr>
+      <tr><th>ライセンス</th><td>政府標準利用規約（第2.0版）／CC BY 4.0 相当</td></tr>
+      <tr><th>抽出範囲</th><td>大宮駅・さいたま新都心駅から各 <b>1,200m</b>（徒歩15分＝不動産表示規約の80m/分×15分）と、<b>2駅を結ぶ線分から1,200m以内</b>（2円が掃過する帯）</td></tr>
+      <tr><th>棟数</th><td><b id="src-n">--</b> 棟（うちLOD2 <b id="src-lod2">--</b> 棟・<b id="src-lodp">--</b>%）／用途地域が特定できない棟 <b id="src-null">--</b> 棟</td></tr>
+    </table>
+
+    <h4>地名と道路</h4>
+    <table>
+      <tr><th style="width:34%">丁目までの地名</th><td><b>e-Stat 令和2年国勢調査 小地域（町丁・字等別）境界データ</b>（総務省統計局／世界測地系 経緯度）。
+        面積が最大の外環の重心を1点に落として <b>62件</b>。<b>PLATEAUに住所属性は無い</b>（<code>bldg:address</code> 0件）ため別途取得しています。
+        ズームを引くと面積の大きい丁目だけ残します</td></tr>
+      <tr><th>道路</th><td><b>PLATEAU さいたま市 <code>udx/tran</code></b>（<code>tran:Road</code> の面）。カプセル圏の18メッシュから <b>7,789件</b>。
+        色は道路種別（<code>tran:function</code>）＝一般国道・高速114+28／都道府県道509／市町村道1,807／その他5,331。
+        <b>初回に押したときだけ6.5MBを読み込みます</b>（既定OFF）</td></tr>
+      <tr><th>⚠ 幅員は入っていない</th><td><code>uro:width</code> は0件。<b>面の形からしか幅は分かりません。</b>この画面では幅を数値として使っていません</td></tr>
+    </table>
+
+    <h4>絶対高さの上限</h4>
+    <table>
+      <tr><th style="width:34%">高度地区</th><td><b>埼玉県 都市計画GIS オープンデータ</b>（高度地区）。さいたま市域を切り出し＝<b>74区画</b>。
+        定めは<b>2種類だけ</b>＝<b>15ｍ地区（39区画・5,367.2ha）</b>と<b>20ｍ地区（35区画・2,512.1ha）</b>。
+        <b>最低限高度地区は0件</b>。指定が無い区域は「0m」ではなく<b>上限なし</b>。
+        一覧は凡例の <b>ⓘ 高度地区の一覧</b> から</td></tr>
+      <tr><th>使い方</th><td><b>板は上限の高さ（15m／20m）に浮かせて描いています</b>（半透明・厚さ50cm・<b>上端が上限</b>）。建物がその板を突き抜けていれば上限超過です。
+        用途地域の線を動かしたとき、<b>線の向こう側で引いた上限</b>を当てています。用途地域 告示第752号と高度地区 第753号は<b>2025-04-25に連番で同日告示</b>、境界も線上27点の実測で<b>中央値1.0m・最大3.5m</b>で一致</td></tr>
+    </table>
+
+    <h4>条例・法令</h4>
+    <table>
+      <tr><th style="width:34%">説明義務</th><td><b>さいたま市中高層建築物の建築及び大規模開発行為等に係る紛争の防止及び調整に関する条例</b>（平成13年 条例第266号）第2条第2項第7〜9号・第9条・第11条</td></tr>
+      <tr><th>日影</th><td>建築基準法 第56条の2（別表第4）。冬至日・真太陽時9〜15時</td></tr>
+    </table>
+
+    <h4>新庁舎</h4>
+    <p><b>「さいたま市新庁舎整備基本設計説明書」</b>（令和8年4月取りまとめ／令和8年8月10日 一部訂正）。
+    延床 約64,000㎡・地上19階・最高高さ 約94m・敷地 約15,000㎡。
+    <b>外周の形だけは実際の設計図ではなく</b>、建築面積に合わせた矩形を街区内に置いた概略です。</p>
+
+    <h4>この画面に無いもの</h4>
+    <p>築年（<code>yearOfConstruction</code> は0件）／敷地界（<code>uro:siteArea</code> は0件）／
+    建物のLOD3・LOD4（この配布物には1件も無く、全市 LOD1・LOD2）。
+    <b>丁目境界も持っていません</b>（「用途地域の区画」は <code>urf:UseDistrict</code> であって丁目ではありません）。</p>
+
+    <div class="meta" style="margin-top:12px">動作環境：PC・Chrome・マウス操作を前提にしています。地図タイルは国土地理院 淡色地図。</div>
+  </div>
+</div>
+
+<!-- 条例の説明モーダル。#jourei-chip をクリックで開く。
+     ★2026-08-23：CSSとイベント登録はあったのに、このマークアップ自体が入っていなかった。
+       getElementById("jourei-modal") が null を返してトップレベルで例外になり、
+       boot() が一度も呼ばれず画面が「読み込み中…」で止まっていた。 -->
+<div id="jourei-modal">
+  <div id="jourei-box">
+    <span id="jourei-close">×</span>
+    <h3>さいたま市中高層建築物の建築及び大規模開発行為等に係る<br>紛争の防止及び調整に関する条例</h3>
+    <div class="meta">平成13年5月1日 条例第266号（平成20年条例第56号で大改正・平成21年7月1日施行）／通称「紛争防止条例」</div>
+
+    <p>一定の高さを超える建物を建てるとき、<b>事業者は、着工前に近隣の住民へ説明しなければならない</b>と定めた、さいたま市の条例です。
+    誰に説明するのかが条文で機械的に決まっているため、<b>建物の位置・高さ・用途地域が分かれば、説明の相手を計算で出せます。</b>
+    このデモが計算しているのは、そこです。</p>
+
+    <h4>手続の流れ（第6条〜第12条）</h4>
+    <table>
+      <tr><th>第6条</th><td>市長に計画の概要を届け出る</td></tr>
+      <tr><th>第7条</th><td>標識を設置する（工事完了まで）</td></tr>
+      <tr><th>第8条</th><td>説明開始日の前日までに計画書を提出</td></tr>
+      <tr><th style="background:#fdf3d0">第9条</th><td><b>事業者は近隣住民に説明しなければならない</b>（1項）／周辺住民には<b>求められたとき</b>に説明（2項）</td></tr>
+      <tr><th>第10条</th><td>説明報告書を提出。標識設置から30日経過後。市長が10日間縦覧</td></tr>
+      <tr><th style="background:#fdf3d0">第11条</th><td>住民は意見書を提出でき、<b>事業者は回答しなければならない</b></td></tr>
+      <tr><th>第12条</th><td>市長が30日以内に審査</td></tr>
+    </table>
+    <p class="meta" style="margin-top:4px">このデモが支援するのは<b>第9条の前段階</b>。計画を立てる前に「誰に説明義務が生じるか」を確定します。
+    第11条の「意見書には回答しなければならない」が、<b>説明充足率</b>（未回答の論点を1つも持たない棟の割合）の実務的な裏付けです。</p>
+
+    <h4>誰に説明するのか（第2条第2項 第7号・第8号）</h4>
+    <table>
+      <tr><th style="width:26%">層</th><th>条例の定義</th><th style="width:22%">義務</th></tr>
+      <tr>
+        <td><b style="color:#b8262c">近隣住民 ア</b><br>（第7号ア）</td>
+        <td>敷地境界線から水平距離<b>15m以内</b> <b>かつ</b> 外壁（これに代わる柱）の面から<b>50m以内</b>の範囲の、土地所有者・建物の占有者／所有者</td>
+        <td rowspan="2"><b>説明しなければならない</b><br>（第9条第1項）</td>
+      </tr>
+      <tr>
+        <td><span class="who wB"></span><b style="color:#e08a2c">近隣住民 イ</b><br>（第7号イ）</td>
+        <td>外壁の面から<b>高さの2倍以内</b> <b>かつ</b> <b>冬至日の真太陽時 午前9時〜午後3時</b>に日影を生じる範囲。<br>
+            <b>ただし商業地域・工業専用地域にあるものを除く</b></td>
+      </tr>
+      <tr>
+        <td><span class="who wC"></span><b style="color:#2b6cb0">周辺住民</b><br>（第8号）</td>
+        <td>近隣住民<b>以外</b>で、ア 敷地境界15m以内／イ 冬至日に日影を生じる範囲（2倍の制限なし）／ウ 外壁から高さの2倍以内（日影は不問）／エ テレビ電波の著しい受信障害</td>
+        <td><b>求められたとき</b>に説明<br>（第9条第2項）</td>
+      </tr>
+    </table>
+    <p class="meta" style="margin-top:4px">★アは「15m」と「50m」の<b>AND</b>で、1つの号です。別々の2層ではありません。</p>
+
+    <h4>日影の測り方（第2条第2項第9号）</h4>
+    <blockquote>平均地盤面から、第一種・第二種低層住居専用地域では<b>1.5m</b>、その他の地域では<b>4m</b>の水平面に生ずる日影</blockquote>
+    <p class="meta">地面に落とした影ではありません。このデモは有効高さ＝（建物高さ −4m）で影を描いています。
+    また条文は<b>真太陽時</b>なので、9時と15時は南中をはさんで対称（太陽高度16.99°・影長は有効高さの3.27倍）になります。</p>
+
+    <h4>★「中高層建築物」の閾値は用途地域で変わる（別表・第2条関係）</h4>
+    <table>
+      <tr><th>区分</th><th>地域</th><th>中高層建築物</th></tr>
+      <tr><td>ア</td><td>第一種・第二種低層住居専用</td><td>軒高7m超、または階数3以上</td></tr>
+      <tr><td>イ</td><td>中高層住専・住居・準住居・<b>近隣商業（容積率200%に限る）</b>・<b>準工業（同）</b>・無指定</td><td><b>高さ10m超</b></td></tr>
+      <tr><td>ウ</td><td><b>近隣商業（200%を除く）</b>・<b>商業</b>・<b>準工業（200%を除く）</b>・工業・工業専用</td><td>(1) <b>高さ15m超</b>、または<br>(2) 高さ10m超で、ア・イの地域に冬至日9〜15時に日影を生じさせるもの</td></tr>
+    </table>
+    <p class="meta">このデモの線は<b>商業地域（区分ウ・15m超）</b>と<b>第二種住居地域（区分イ・10m超）</b>の境界です。
+    <b>線を越えると閾値が15m超から10m超に下がり、これまで説明義務の対象ですらなかった10〜15mの棟が対象になります。</b>
+    さらに近隣商業と準工業は「容積率200%かどうか」で区分が分かれるため、<b>用途地域を変えなくても、容積率の変更だけで説明義務の範囲が動きます。</b></p>
+
+    <h4>何が「紛争」とされているか（第2条第2項第12号）</h4>
+    <blockquote>中高層建築物の建築に伴って生じる<b>日照、通風及び周辺の交通安全の阻害、テレビジョン放送の受信障害並びに工事中の騒音、振動等</b>に関する、近隣住民又は周辺住民と事業者又は工事施工者との間の紛争</blockquote>
+    <p class="meta"><b>★この条例は「建物が建つときの紛争」の法であって、「用途地域が変わるとき」の法ではありません。</b>
+    だから8つの論点のうち、この列挙に当たるのは <b>t7（日当たり）＝「日照」</b> の1つだけです。
+    <b>用途地域の変更では工事が発生しない</b>ので「工事中の騒音・振動」は論点になりません。</p>
+    <p class="meta">残る7つの根拠は条例の外にあります——
+    <b>t1</b>（制度そのもの）＝都計法・建基法／<b>t2</b>（資産価値）＝路線価・固定資産税評価額（<b>PLATEAUには無い</b>）／
+    <b>t3</b>（同じ規模を建てられるか）＝建基法52・53条＋高度地区／<b>t4</b>（事業を続けられるか）＝<b>建基法48条・別表第2</b>／
+    <b>t5・t6</b>（住宅地として／商業地として）＝環境の変化／<b>t8</b>（建て替えなくても直後から変わること）＝告示から直ちに効くもの。
+    <b>この「条例が想定していない7つ」こそ、用途地域の変更に固有の問いです。</b></p>
+    <p class="meta">テレビ受信障害は地形と送信所方向が要るため未実装です。
+    <b>第8号エ「テレビ電波の著しい受信障害が生じる者」は周辺住民の独立した要件</b>なので、
+    <b>周辺住民の棟数はその分だけ過小に出ています。</b></p>
+    <p class="meta"><b>恣意的でないのは「どの棟がどの論点を持つか」の方です。</b>
+    これは<b>条例のどの号で説明対象になったか</b>と<b>線をどちらに動かしたか</b>だけで決まり、こちらの匙加減が入りません。
+    <b>後退（住居側が広がる）なら t5「住宅地として住みやすくなるのか」、拡大なら t6「商業地として商売が成り立つのか」</b>——
+    実際に起きるのはどちらか一方なので、両方を同時には出しません。
+    論点リストそのものは、条例（2つ）＋条例の定義（1つ）＋条例への寄せ（2つ）＋事象に固有（3つ）の混成です。</p>
+
+    <h4>このデモの限界（明示しておきます）</h4>
+    <ul style="margin:4px 0 0 18px;padding:0">
+      <li><b>敷地境界線はPLATEAUに無い</b>（<code>uro:siteArea</code> は0件）ため、建物の外周で代用しています。実際の15mはもう少し外側に出ます</li>
+      <li>棟の重心で距離を測っています。大きな建物では実際の判定と数mずれます</li>
+      <li>建物の所有者・占有者の数は分かりません。数えているのは<b>棟</b>であって人ではありません</li>
+      <li>テレビ電波の受信障害（第8号エ）は未実装です</li>
+      <li>影は平坦な地面を仮定しています（DEMの起伏を反映していません）</li>
+    </ul>
+    <p class="meta" style="margin-top:10px">条文の出典：さいたま市例規集
+      <a href="https://www1.g-reiki.net/saitamat/reiki_honbun/r375RG00000771.html" target="_blank" rel="noopener">
+      https://www1.g-reiki.net/saitamat/reiki_honbun/r375RG00000771.html</a></p>
+  </div>
+</div>
+
+<!-- 対象範囲とランドマークの説明。上帯右端の #head-stat をクリックで開く。
+     ★凡例からランドマーク節を外し、ここへ移した（2026-08-23 本人指示）。
+       凡例は「地図の色の読み方」だけにする。 -->
+<div id="area-modal">
+  <div id="area-box">
+    <span id="area-close">×</span>
+    <h3>対象範囲とランドマーク</h3>
+    <div class="meta">PLATEAU さいたま市 2025年度／地図上の破線が範囲の輪郭</div>
+
+    <h4>範囲の決め方</h4>
+    <p><b>大宮駅から半径1200m</b>と<b>さいたま新都心駅から半径1200m</b>の2つの円、および
+    <b>その2つの円を互いに移動させたときに掃過される帯</b>を合わせた範囲です。
+    2駅を結ぶ線分から1200m以内、という1つの条件で表せます（数学的にはカプセル形）。</p>
+    <p><b>1200mの根拠＝徒歩15分。</b>不動産の表示に関する公正競争規約が定める「徒歩1分＝80m」の換算で、80m/分 × 15分 = 1200m。</p>
+
+    <table>
+      <tr><th style="width:34%">2駅の距離</th><td>1,641.9 m</td></tr>
+      <tr><th>面積</th><td>8.46 km²</td></tr>
+      <tr><th>抽出した建物</th><td><b>25,467棟</b>（うちLOD2 6,468棟・25.4%）</td></tr>
+      <tr><th>内訳</th><td>大宮のみ1200m内 12,098／両方の重なり 2,625／新都心のみ1200m内 9,325／掃過帯のみ 1,419</td></tr>
+      <tr><th>3次メッシュ</th><td>17枚</td></tr>
+    </table>
+
+    <h4>地図上のランドマーク</h4>
+    <table>
+      <tr><th style="width:30%">記号</th><th>意味</th></tr>
+      <tr><td><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#1f2328;vertical-align:middle"></span> <b>大宮駅</b></td>
+          <td>範囲の北の極。ここから半径1200m＝徒歩15分</td></tr>
+      <tr><td><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#1f6f5c;vertical-align:middle"></span> <b>さいたま新都心駅</b></td>
+          <td>範囲の南の極。同じく半径1200m＝徒歩15分。座標は国土地理院の住所検索による</td></tr>
+      <tr><td><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#1a1d21;vertical-align:middle"></span> <b>新庁舎予定地</b>（四角＝建物。丸は駅）</td>
+          <td><b>さいたま市の新しい本庁舎の整備予定地。2031年度（令和13年度）の移転をめざす。</b>新都心駅から南東へ約330m、大宮駅から南南東へ約1.9km。令和4年4月に市役所の位置に関する条例の改正議案が可決され、<b>令和8年4月に基本設計（地上19階・最高94m・延床約64,000㎡）が公表されている</b></td></tr>
+      <tr><td><span style="display:inline-block;width:22px;border-top:2px dashed #1f2328;vertical-align:middle"></span> <b>破線</b></td>
+          <td>対象範囲の輪郭（上記のカプセル形）</td></tr>
+    </table>
+    <p class="meta">ランドマークの丸をクリックすると、それぞれの詳細が出ます。</p>
+
+    <h4>なぜこの2駅なのか</h4>
+    <p><b>新庁舎の移転が、この案の問いの出発点です。</b>市の本庁舎が新都心へ動くとき、
+    大宮駅と新都心のあいだの用途地域をどう扱うのか——それを線を動かして試せるようにしています。</p>
+
+    <h4>この回廊は、データが最もそろっている場所でもあります</h4>
+    <table>
+      <tr><th style="width:38%">2駅を結ぶ軸からの距離</th><th>棟数</th><th>LOD2</th></tr>
+      <tr><td>0–200 m</td><td>1,018</td><td><b>100.0%</b></td></tr>
+      <tr><td>200–400 m</td><td>1,460</td><td><b>93.6%</b></td></tr>
+      <tr><td>400–600 m</td><td>2,066</td><td>44.4%</td></tr>
+      <tr><td>800–1000 m</td><td>2,462</td><td>0.2%</td></tr>
+    </table>
+    <p class="meta">回廊の中心400mはLOD2がほぼ完全にそろっています。用途地域の構成も、
+    第一種住居200%（33.9%）・商業400%ほか（33.1%）・準工業200%（19.5%）・第二種住居200%（8.6%）と、
+    <b>住居系・商業系・工業系が隣り合う</b>状態です。</p>
+
+    <p class="meta" style="margin-top:10px">出典：国土交通省 PLATEAU（さいたま市 2025年度）／国土地理院 住所検索API／
+      <a href="https://www.city.saitama.lg.jp/006/007/002/022/index.html" target="_blank" rel="noopener">さいたま市 新庁舎整備の情報</a></p>
+  </div>
+</div>
+
+<!-- 新庁舎の建築計画。#shincho-chip をクリックで開く。
+     ★右パネルが長くなるので諸元はここへ寄せた（2026-08-23 本人指示）。 -->
+<div id="shincho-modal">
+  <div id="shincho-box">
+    <span id="shincho-close">×</span>
+    <h3>さいたま市 新庁舎の建築計画</h3>
+    <div class="meta">出典＝さいたま市新庁舎整備基本設計説明書（令和8年4月取りまとめ／令和8年8月10日 一部訂正）。<b>数値は市の公表値そのままで、推定を含みません。</b></div>
+
+    <p>市役所本庁舎は<b>令和13年度（2031年度）を目途にさいたま新都心へ移転</b>します。
+    基本設計が公表されているので、<b>このデモの94mの棟は仮定ではなく、公表された設計の諸元そのもの</b>です。</p>
+
+    <h4>建物概要</h4>
+    <table>
+      <tr><th style="width:36%">計画地</th><td>さいたま市大宮区北袋町一丁目603番地1 外</td></tr>
+      <tr><th>敷地面積</th><td><b>約 15,000 ㎡</b>（新庁舎敷地）／約 2,300 ㎡（民間機能敷地）</td></tr>
+      <tr><th>主要用途</th><td>庁舎</td></tr>
+      <tr><th>構造</th><td>免震上部＝鉄骨造／免震下部＝鉄筋コンクリート造（<b>免震構造</b>）</td></tr>
+      <tr><th>建築面積 ／ 建蔽率</th><td><b>約 10,000 ㎡</b> ／ <b>約 67%</b></td></tr>
+      <tr><th>延床面積</th><td><b>約 64,000 ㎡</b>（建物 約54,000 ㎡ ＋ デッキ等外構 約10,000 ㎡）</td></tr>
+      <tr><th>容積対象床面積 ／ 容積率</th><td><b>約 50,000 ㎡</b> ／ <b>約 330%</b></td></tr>
+      <tr><th>階数</th><td><b>地下1階・地上19階</b>（建築基準法上20階）・塔屋1</td></tr>
+      <tr><th>最高高さ</th><td><b>約 94 m</b></td></tr>
+      <tr><th>駐車場・駐輪場</th><td>利用者 約130台／議会 約40台／公用車 約130台／自動二輪 約180台／大型バス 5台／自転車 約700台</td></tr>
+    </table>
+    <p class="meta">棟は3つ＝<b>行政棟</b>（高層）・<b>中広場棟</b>（全天候型の屋根付き広場）・<b>議会棟</b>（低層）。94mは行政棟。
+    4階と6〜17階が執務スペース、5階が機械室（浸水対策で設備を上階へ）、3階が議会機能、18階＋展望フロア、屋上にヘリポート。</p>
+
+    <h4>敷地の法的規制（設計書の記載どおり）</h4>
+    <table>
+      <tr><th style="width:36%">区域区分・用途地域</th><td><b>商業地域</b></td></tr>
+      <tr><th>防火指定</th><td>防火地域</td></tr>
+      <tr><th>指定建蔽率 ／ 指定容積率</th><td><b>80% ／ 400%</b></td></tr>
+      <tr><th>高さ制限</th><td>なし</td></tr>
+      <tr><th>地区計画</th><td>北袋町1丁目地区地区計画</td></tr>
+      <tr><th>日影規制</th><td><b>なし（敷地外に他の用途地域あり（第二種住居地域））</b></td></tr>
+      <tr><th>環境アセスメント</th><td>該当（高層建築物の建設、大規模建築物の建設）</td></tr>
+    </table>
+
+    <h4>ここから言えること（2つ）</h4>
+    <p><b>① この庁舎は用途地域を変えずに建ちます。</b>容積 330% ≦ 400%、建蔽 67% ≦ 80%、高さ制限なし。
+    「新庁舎のために用途地域の変更が要る」とは言えません。</p>
+    <p><b>② それでも説明義務は生じます。</b>設計書は日影規制の欄に自ら
+    <b>「なし（敷地外に他の用途地域あり（第二種住居地域））」</b>と書いています。
+    建築基準法56条の2第4項により、<b>規制のない地域の建物でも、規制のある地域に落とす日影は規制の対象</b>です。
+    94mの冬至日の影は有効高さ(94−4)×3.27＝<b>約294m</b>届き、第二種住居地域は敷地の東〜北東150〜300mにあります。
+    紛争防止条例の別表でも商業地域は区分ウで、<b>高さ10m超でア・イの地域に冬至日の日影を落とすものは中高層建築物</b>です。</p>
+
+    <h4>⚠️ このデモの限界</h4>
+    <ul style="margin:4px 0 0 18px;padding:0">
+      <li><b>外周の形だけは実際の設計図ではありません。</b>建築面積 約10,000㎡ に合わせた<b>125m×80mの矩形</b>を、商業地域400/80の街区のうち建物のない範囲の中心（139.63660, 35.89210）に、街区の辺の向き（東西軸から26度）で置いた概略です。<b>説明対象の棟数はこの位置と形に依存します。</b></li>
+      <li>実際は3棟構成ですが、1つの矩形で代表させています</li>
+      <li>高さ・階数・延床・容積率・建蔽率・敷地面積・構造は<b>公表値そのまま</b>です</li>
+    </ul>
+
+    <h4>副産物：容積消化率の式の精度を実測できました</h4>
+    <p>新庁舎は<b>敷地面積が公表されている唯一の棟</b>です（PLATEAUの <code>uro:siteArea</code> は0件、市の建物現況調査にもありません）。
+    このデモの推定式は 建築面積 ÷ 指定建蔽率 ＝ 10,000 ÷ 0.80 ＝ <b>12,500 ㎡</b>。公表値は <b>15,000 ㎡</b> で、<b>17%小さく見積もっています</b>。
+    敷地を17%小さく見積もる＝許容延床を17%小さく見積もる＝<b>容積消化率が約20%大きく出る</b>。
+    「容積消化率は判定に使わず参考値」という設計判断が、実測1件で裏づけられました。</p>
+
+    <p class="meta" style="margin-top:10px">
+      <a href="https://www.city.saitama.lg.jp/006/007/002/022/001/005/p130093.html" target="_blank" rel="noopener">さいたま市／新庁舎整備基本設計説明書を取りまとめました</a></p>
+  </div>
+</div>
+
+<!-- 容積消化率の計算式。#used-chip をクリックで開く。
+     ★右パネルに式を長々と書くと読み飛ばされるので、ここへ寄せた（2026-08-23 本人指示）。 -->
+<!-- 判定の前提（敷地境界の推定・日影・除外）。#method-chip から開く。
+     棟ごとに数値が変わるので中身は renderJourei() が流し込む。 -->
+<div id="method-modal">
+  <div id="method-box">
+    <span id="method-close">×</span>
+    <h3>この棟の判定に使った前提</h3>
+    <div class="meta">敷地境界の推定・日影の計算条件・条文上の除外</div>
+    <div id="method-body"></div>
+  </div>
+</div>
+
+<!-- 説明充足率の定義。右帯の #gauge-chip から開く。
+     ★右帯は「説明充足率 → 準備する想定回答（チェックボックス）」の順を最優先にするため、
+       ゲージ直下にあった長い注記をここへ寄せた（2026-08-23 本人指示）。 -->
+<div id="gauge-modal">
+  <div id="gauge-box">
+    <span id="gauge-close">×</span>
+    <h3>説明充足率とは</h3>
+    <div class="meta">賛成率でも同意率でもありません。<b>答えていない論点が残っているかどうか</b>だけを数えています。</div>
+    <blockquote style="font-size:13px;line-height:1.9">
+      <b>説明充足率 ＝ 配る資料だけで疑問が全部つぶれる棟 ÷ 説明対象の棟</b>
+    </blockquote>
+    <p>聞きたいことは棟ごとに違います（<b>条例のどの号で説明対象になったか</b>で決まります。恣意的に選んでいません）。
+    <b>影響の大小ではなく「答えが載っているか」だけ</b>を数えています。賛否は測っていません。</p>
+    <p class="meta">2/3・3/4・4/5 は参照水準であり、用途地域変更の法定要件ではありません。どの水準を採るかは市が決めます。</p>
+  </div>
+</div>
+
+<div id="used-modal">
+  <div id="used-box">
+    <span id="used-close">×</span>
+    <h3>容積消化率の計算式</h3>
+    <div class="meta">この画面の「色分け＝容積消化率」で使っている値。<b>参考値であって、既存不適格の判定には使っていません。</b></div>
+
+    <h4>式</h4>
+    <blockquote style="font-size:13px;line-height:1.9">
+      <b>容積消化率 ＝（延床面積 ÷ 1.25）÷（建築面積 × 指定容積率 ÷ 指定建蔽率）</b>
+    </blockquote>
+
+    <h4>なぜ 1.25 で割るのか</h4>
+    <p><b>延床面積と容積対象面積は一致しません。</b>共用廊下・階段・エレベーターホール・駐車場などは
+    容積率の算定から除かれます（建築基準法52条3項・6項ほか）。
+    PLATEAUが持っているのは <code>uro:totalFloorArea</code>＝<b>延床面積</b>だけなので、
+    <b>1.25で割って容積対象面積に近似</b>しています。</p>
+
+    <h4>なぜ「建築面積 × 指定容積率 ÷ 指定建蔽率」が許容延床なのか</h4>
+    <p>本来 許容延床 ＝ 敷地面積 × 指定容積率 です。ところが<b>敷地面積はPLATEAUに1件もありません</b>
+    （<code>uro:siteArea</code> は0件。さいたま市の建物現況調査448,576棟にも面積はありません）。
+    そこで <b>敷地面積 ≒ 建築面積 ÷ 指定建蔽率</b> と置き換えています。
+    「敷地いっぱいに建蔽率まで建てている」と仮定した推定です。</p>
+
+    <h4>★だから判定には使いません</h4>
+    <p>この推定は<b>実測で17%ずれる</b>ことが確かめられています。
+    <b>さいたま市の新庁舎</b>は、このデモで唯一<b>敷地面積が公表されている棟</b>です。</p>
+    <table>
+      <tr><th style="width:46%">このデモの推定（建築面積 ÷ 指定建蔽率）</th><td>10,000 ÷ 0.80 ＝ <b>12,500 ㎡</b></td></tr>
+      <tr><th>公表されている敷地面積</th><td><b>15,000 ㎡</b></td></tr>
+      <tr><th>ずれ</th><td><b>17% 小さく見積もる</b> → 許容延床も17%小さく → <b>容積消化率が約20%大きく出る</b></td></tr>
+    </table>
+    <p>さらに、この式は<b>高い棟ほど敷地を過小に見積もります</b>。実測すると
+    <b>11階以上は100%が「超過」</b>と出るのに 1〜3階では0.1%しか出ませんでした。
+    実質「4階建て以上か」を数えているだけになってしまいます。</p>
+    <p><b>そのため既存不適格の判定は、容積ではなく「絶対高さ」で行っています。</b>
+    高度地区の上限（m）と <code>bldg:measuredHeight</code> の比較なので、
+    <b>敷地面積が式から消え、推定を含みません。</b></p>
+
+    <h4>この画面での扱い</h4>
+    <ul style="margin:4px 0 0 18px;padding:0">
+      <li>色分けの1モードとして<b>参考表示</b>するだけ</li>
+      <li>棟をクリックしたときのポップアップに数値を出す</li>
+      <li><b>線を動かしたときの既存不適格の判定には一切使っていない</b></li>
+      <li>「線を越えた棟のうち、すぐ伸ばせる棟」の目安（容積消化率0.9以上）にだけ副次的に使用</li>
+    </ul>
+
+    <p class="meta" style="margin-top:10px">計算できたのは 25,467棟中 22,842棟（89.7%）。
+    延床面積・建築面積・棟単位の指定容積率／指定建蔽率がそろっている棟だけが対象です。</p>
+  </div>
+</div>
+
+<!-- 高度地区の一覧。凡例の #koudo-chip をクリックで開く（2026-08-24 本人指示）。
+     ★データは最初から持っていた（koudo_omiya.geojson の hmax）。画面に出していなかっただけ。
+     一覧の中身は buildKoudoModal() が実データから流し込む（数字を直書きしない）。 -->
+<div id="koudo-modal">
+  <div id="koudo-box">
+    <span id="koudo-close">×</span>
+    <h3>高度地区（絶対高さの上限）</h3>
+    <div class="meta">用途地域だけでは絶対高さの上限は決まりません。<b>都市計画の「高度地区」で m 単位に定めます。</b>
+    この画面の既存不適格の判定は、この上限と <code>bldg:measuredHeight</code> の比較です。</div>
+
+    <h4>さいたま市に定められている高度地区</h4>
+    <div id="koudo-city"></div>
+
+    <h4>この画面の範囲にかかっている区画</h4>
+    <div id="koudo-here"></div>
+
+    <h4>読むときの注意</h4>
+    <ul style="margin:6px 0 0 18px;padding:0">
+      <li><b>最低限高度地区は1件もありません。</b>県GIS 74区画すべてで「高さ最低限」が空欄＝<b>定めているのは最高限だけ</b>です。</li>
+      <li><b>指定が無い区域は「上限なし」です。</b>0m ではありません。<b>この線の商業側は指定なし</b>＝
+        高度地区による絶対高さの上限がありません（斜線制限・日影規制は別にかかります）。</li>
+      <li><b>面積は県GISが区域全体に付けている値</b>で、区画ごとの面積ではありません（同じ値が全区画に入っています）。
+        「この画面の範囲」の面積はポリゴンから実測した値です。</li>
+      <li>このファイルは<b>範囲に交差する区画をまるごと</b>持っています（範囲で切り取っていません）。
+        だから面積は対象範囲より大きく出ます。</li>
+      <li>建築基準法55条の絶対高さ制限（低層住居専用・田園住居の10m／12m）は<b>用途地域に付いてくる別系統</b>です。
+        この画面では <code>heightCap()</code> が両方を見ています。</li>
+    </ul>
+
+    <h4>出所</h4>
+    <p class="meta">埼玉県 都市計画GIS オープンデータ「高度地区」からさいたま市域を切り出し
+    （<code>data/pref_koudo_saitama.geojson</code> 74区画 → 対象範囲ぶん <code>data/koudo_omiya.geojson</code>）。
+    用途地域 さいたま市告示第752号 と 高度地区 第753号は<b>2025-04-25に連番で同日告示</b>されており、
+    この線と20ｍ地区の境界は<b>線上27点の実測で中央値1.0m・最大3.5m</b>で一致します。</p>
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   合意形成の風洞実験 — 実データ接続版（タスク#7）
+   ダミー埋め込みを廃止し、data/*.geojson を fetch で読む。
+   ※ file:// では CORS で失敗する。必ず HTTP で開くこと：
+       python3 -m http.server 8765
+       → http://localhost:8765/index.html
+   ========================================================================= */
+
+const DATA = {
+  buildings: "data/buildings_omiya.geojson",
+  zones: "data/zones_city.geojson",
+  koudo: "data/koudo_omiya.geojson",  // 埼玉県GIS 高度地区（絶対高さの上限・m）
+  outline: "data/city_outline.geojson",  // さいたま市全域の外周（PLATEAU urf:UrbanPlanningArea を結合）
+  shincho: "data/shinchosha.geojson", // さいたま市 新庁舎（基本設計・令和8年4月）
+  chome:   "data/chome_omiya.geojson",// 丁目までの地名（e-Stat 令和2年国勢調査 小地域境界の重心）
+  roads:   "data/roads_omiya.geojson" // PLATEAU udx/tran の道路（重いので押されたときに読む）
+};
+
+/* ---- 対象範囲 ----------------------------------------------------------
+   大宮駅 半径1200m と さいたま新都心駅 半径1200m の2円、および
+   その2円を互いに移動させたときに掃過される帯（＝2駅を結ぶ線分から1200m以内）。
+   1200m の根拠＝徒歩15分。不動産の表示に関する公正競争規約が定める
+   「徒歩1分＝80m」の換算で 80m/分 × 15分 = 1200m。
+   駅間距離は 1,641.9m。抽出結果は 25,467棟（うちLOD2 6,468棟・25.4%）。
+   旧範囲＝大宮駅 半径900m（6,963棟）はこの中に完全に含まれる。         */
+const OMIYA = [139.6238, 35.9063];
+const SHINTOSHIN = [139.633683, 35.893878];   // 国土地理院 住所検索APIによる駅位置
+const AREA_R = 1200;                           // 徒歩15分＝80m/分 × 15分
+
+/* 用途地域の色（都市計画図の慣例配色） */
+const ZONE_COLORS = {
+  1:  "#4faa5a", 2:  "#8dc98f", 3:  "#bcdfae", 4:  "#dcebbd",
+  5:  "#f7f3a0", 6:  "#f5e08c", 7:  "#f0c96e", 8:  "#e8b27a",
+  9:  "#f2a2a2", 10: "#e8636b", 11: "#c3a5d6", 12: "#9fc2e6", 13: "#6fa3d6"
+};
+const ZONE_NAMES = {
+  1:"第一種低層住居専用地域", 2:"第二種低層住居専用地域",
+  3:"第一種中高層住居専用地域", 4:"第二種中高層住居専用地域",
+  5:"第一種住居地域", 6:"第二種住居地域", 7:"準住居地域", 8:"田園住居地域",
+  9:"近隣商業地域", 10:"商業地域", 11:"準工業地域", 12:"工業地域", 13:"工業専用地域"
+};
+const COLOR_UNKNOWN = "#c7cbcf";
+
+const COLOR_PLAIN   = "#b9c2c9";   // 色分けなしのときの建物色
+/* 容積消化率の色（低い＝余力あり＝青 / 高い＝使い切り＝赤） */
+const USED_BINS = [
+  { max: 0.25, color: "#2b6cb0", label: "〜0.25（大きな余力）" },
+  { max: 0.50, color: "#63a0cf", label: "0.25〜0.50" },
+  { max: 0.75, color: "#c9d6b0", label: "0.50〜0.75" },
+  { max: 1.00, color: "#efa860", label: "0.75〜1.00" },
+  { max: 1.50, color: "#d9613a", label: "1.00〜1.50（超過）" },
+  { max: Infinity, color: "#8f1d24", label: "1.50〜" }
+];
+const COLOR_NO_USED = "#d5d8db";
+
+let buildings = null;   // FeatureCollection
+let zones = null;       // FeatureCollection
+let koudo = null;       // 高度地区（15m地区・20m地区）
+let cityOutline = null; // さいたま市全域の外周（1本。区画の境界ではない）
+let shincho = null;     // 新庁舎（基本設計の諸元で建てた仮想の棟）
+let shinchoOn = true;   // ★既定で建てておく。ボタンで現況に戻す
+let colorMode = "zone"; // zone | used | plain（plain＝色分けなし）
+let showZones = true;
+let showBase = true;
+
+/* ---------------- 地図 ---------------- */
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: {
+      // 地理院タイルは「あれば読みやすくなる」だけの背景。
+      // オフライン時はタイルが落ちるが、区域と建物は自前のGeoJSONなので画面は成立する。
+      /* ★ホスト名は cyberjapandata.gsi.go.jp。
+         2026-08-24 まで "cyberjapandata.to.gsi.go.jp" と書いており、
+         そもそも名前解決できず一度も表示されたことがなかった（curlで確認：DNS不能／正しい方は200・67KB）。
+         ⚠ MapLibreのラスタ取得失敗は「タイルが出ない」だけで、画面は普通に動いてしまう。
+            さらに下の map.on("error") がボタンを「地理院地図 ⚠（ネットワーク未接続）」に変えるので、
+            会場のネットのせいに見えて2日気づかなかった。URLの綴りは必ず curl で確かめる。 */
+      gsi: {
+        type: "raster",
+        tiles: ["https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png"],
+        tileSize: 256,
+        maxzoom: 18,
+        attribution: "地理院タイル（国土地理院）"
+      }
+    },
+    layers: [
+      { id: "bg", type: "background", paint: { "background-color": "#eef0f2" } },
+      { id: "gsi", type: "raster", source: "gsi", paint: { "raster-opacity": 1.0 } }
+    ]
+  },
+  // 初期表示は2駅の中点。大宮駅と新都心（新庁舎予定地）が同時に視野に入る。
+  // 線を動かすプリセットを押すと zoom 16.2 で線へ寄る。
+  center: [(OMIYA[0] + SHINTOSHIN[0]) / 2, (OMIYA[1] + SHINTOSHIN[1]) / 2],
+  zoom: 13.8,
+  pitch: 55,
+  bearing: -18,
+  antialias: true,
+  maxZoom: 20
+});
+map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+
+/* 会場のネットワークが落ちても止まらないようにする。
+   落ちるのは地理院タイルだけで、区域・建物は同梱のGeoJSONなので画面は成立する。 */
+let tileErrorNoted = false;
+map.on("error", e => {
+  const msg = String((e && e.error && e.error.message) || "");
+  if (msg.indexOf("cyberjapandata") >= 0 || (e.sourceId === "gsi")) {
+    if (!tileErrorNoted) {
+      tileErrorNoted = true;
+      const btn = document.querySelector('#layer-toggle button[data-layer="base"]');
+      // ★ボタンの文字は伸ばさない。理由はマウスオーバー（title）で見せる（2026-08-23 本人指示）
+      if (btn) {
+        btn.classList.remove("active");
+        btn.textContent = "地理院地図 ⚠";
+        btn.disabled = true;
+        btn.title = "地理院タイルを読み込めませんでした（ネットワーク未接続）。"
+                  + "用途地域の区画と建物は同梱のGeoJSONなので、地図の表示は成立します。";
+      }
+      const lg = document.getElementById("map-legend-note");
+      if (lg) lg.textContent = "";
+      if (map.getLayer("gsi")) map.setLayoutProperty("gsi", "visibility", "none");
+    }
+    return; // 背景タイルの失敗は無視する
+  }
+  console.error(e && e.error ? e.error : e);
+});
+map.addControl(new maplibregl.ScaleControl({ maxWidth: 120, unit: "metric" }), "bottom-right");
+
+/* ---------------- 読み込み ---------------- */
+async function loadJSON(url) {
+  const res = await fetch(url, { cache: "no-cache" });
+  if (!res.ok) throw new Error(url + " : HTTP " + res.status);
+  return res.json();
+}
+
+async function boot() {
+  const loading = document.getElementById("loading");
+  try {
+    const [b, z, k, sc, ch, ol] = await Promise.all([
+      loadJSON(DATA.buildings), loadJSON(DATA.zones), loadJSON(DATA.koudo), loadJSON(DATA.shincho),
+      // 丁目名は10KB。落ちても本体は動かしたいので、失敗したら空で続ける
+      loadJSON(DATA.chome).catch(() => ({ type: "FeatureCollection", features: [] })),
+      // 市域の外周は170KB。落ちても本体は動かしたいので、失敗したら空で続ける
+      loadJSON(DATA.outline).catch(() => ({ type: "FeatureCollection", features: [] }))
+    ]);
+    chome = ch;
+    buildings = b;
+    // 区域は「カプセル全体を覆う矩形」で切る。2駅の中点から半径2400m。
+    // 旧＝大宮駅から2000mだったが、新都心側（大宮駅から南へ2,842m）が欠けるため広げた。
+    const mid = [(OMIYA[0] + SHINTOSHIN[0]) / 2, (OMIYA[1] + SHINTOSHIN[1]) / 2];
+    zones = clipZonesToView(z, mid, 2400);
+    koudo = k;
+    shincho = sc;
+    cityOutline = ol;
+  } catch (err) {
+    loading.innerHTML =
+      '<div style="text-align:center;line-height:1.8;color:#c0392b;">' +
+      "データを読み込めませんでした。<br>" + String(err.message) + "<br>" +
+      '<span style="color:#5b6470;font-size:12px;">file:// で開いていませんか。' +
+      "python3 -m http.server 8765 で開いてください。</span></div>";
+    return;
+  }
+  await mapReady();
+  // ★addLayers() の中の capsuleRing() が toM() を使うので、
+  //   線のローカル座標系（lineOrigin）を先に確定させておく。
+  //   addLineLayers() の中でも呼ぶが、初期化は冪等なので問題ない。
+  initLineGeometry();
+  addLayers();
+  addLandmarks();
+  addChomeLabels();
+  addKoudoLabels();
+  buildKoudoModal();
+  addLineLayers();
+  addJoureiLayers();
+  addBlinkLayers();
+  addShinchoLayers();
+  refreshJourei();
+  renderAggregate();
+  renderFaq();
+  renderGauge();
+  refreshPanel();
+  loading.style.display = "none";
+}
+
+function mapReady() {
+  return new Promise(resolve => {
+    if (map.isStyleLoaded()) resolve(); else map.once("load", resolve);
+  });
+}
+
+/* 半径 r_m の矩形に掛かる区域だけ残す（市全域1,306区画を全部描くと重いため） */
+function clipZonesToView(fc, center, r_m) {
+  const dLon = r_m / 90200, dLat = r_m / 111000;
+  const [w, s, e, n] = [center[0] - dLon, center[1] - dLat, center[0] + dLon, center[1] + dLat];
+  const keep = fc.features.filter(f => {
+    const rings = f.geometry.type === "Polygon"
+      ? [f.geometry.coordinates[0]]
+      : f.geometry.coordinates.map(p => p[0]);
+    return rings.some(r => {
+      let mnx = 1e9, mny = 1e9, mxx = -1e9, mxy = -1e9;
+      for (const p of r) {
+        if (p[0] < mnx) mnx = p[0];
+        if (p[0] > mxx) mxx = p[0];
+        if (p[1] < mny) mny = p[1];
+        if (p[1] > mxy) mxy = p[1];
+      }
+      return !(mxx < w || mnx > e || mxy < s || mny > n);
+    });
+  });
+  return { type: "FeatureCollection", features: keep };
+}
+
+/* ---------------- 色式（MapLibre expression） ---------------- */
+function zoneColorExpr(prop) {
+  const expr = ["match", ["get", prop]];
+  Object.keys(ZONE_COLORS).forEach(k => { expr.push(Number(k), ZONE_COLORS[k]); });
+  expr.push(COLOR_UNKNOWN);
+  return expr;
+}
+
+function buildingColorExpr() {
+  if (colorMode === "zone") return zoneColorExpr("zone_now");
+  if (colorMode === "plain") return COLOR_PLAIN;
+  // used_ratio
+  const steps = ["step", ["get", "used_ratio"], USED_BINS[0].color];
+  for (let i = 0; i < USED_BINS.length - 1; i++) {
+    steps.push(USED_BINS[i].max, USED_BINS[i + 1].color);
+  }
+  return ["case", ["==", ["typeof", ["get", "used_ratio"]], "number"], steps, COLOR_NO_USED];
+}
+
+/* ---------------- レイヤ ---------------- */
+function addLayers() {
+  map.addSource("radius", { type: "geojson", data: capsuleRing(OMIYA, SHINTOSHIN, AREA_R, 96) });
+  map.addLayer({
+    id: "radius-line", type: "line", source: "radius",
+    paint: { "line-color": "#1f2328", "line-width": 1.6, "line-opacity": 0.5, "line-dasharray": [4, 3] }
+  });
+  map.addSource("zones", { type: "geojson", data: zones });
+  map.addSource("buildings", { type: "geojson", data: buildings });
+
+  map.addLayer({
+    id: "zones-fill", type: "fill", source: "zones",
+    paint: { "fill-color": zoneColorExpr("fn"), "fill-opacity": 0.18 }
+  });
+  map.addLayer({
+    id: "zones-line", type: "line", source: "zones",
+    paint: { "line-color": "#4a5259", "line-width": 1.4, "line-opacity": 0.75 }
+  });
+
+  /* ★さいたま市全域を囲う外周線（2026-08-24 本人指示）。
+     ボタンは付けない＝常に出す。1,306区画の境界ではなく、市域の外側だけを1本で囲う。
+     出所＝PLATEAU udx/urf の urf:UrbanPlanningArea（都市計画区域）2件を結合し、穴を落としたもの。
+     ⚠ 行政界そのものではない。ただし面積は 218.09km² で公表市域 217.43km² の100.3%＝実質一致する
+       （生成＝python3 build_city_outline.py。この検算値もそこに出る）。
+     ⚠ urf:CityPlanningArea という型は存在しない。正しい型名は urf:UrbanPlanningArea。 */
+  if (cityOutline && cityOutline.features.length) {
+    map.addSource("city-outline", { type: "geojson", data: cityOutline });
+    map.addLayer({   // 下に白い縁取りを敷いて、淡色地図の上でも見えるようにする
+      id: "city-outline-halo", type: "line", source: "city-outline",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#ffffff", "line-width": 5, "line-opacity": 0.85 }
+    });
+    map.addLayer({
+      id: "city-outline-line", type: "line", source: "city-outline",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#2f3b45", "line-width": 2.2, "line-opacity": 0.95 }
+    });
+  } else {
+    console.warn("さいたま市の外周（city_outline.geojson）を読めませんでした");
+  }
+  map.addLayer({
+    id: "buildings-3d", type: "fill-extrusion", source: "buildings",
+    paint: {
+      "fill-extrusion-color": buildingColorExpr(),
+      "fill-extrusion-height": ["get", "h"],
+      "fill-extrusion-base": 0,
+      "fill-extrusion-opacity": 0.94
+    }
+  });
+
+  map.on("click", "buildings-3d", e => {
+    if (!e.features || !e.features.length) return;
+    showPopup(e.features[0]);
+    // クリックした棟を条例の説明対象の計算対象にする
+    const id = e.features[0].properties.id;
+    subject = buildings.features.find(f => f.properties.id === id) || null;
+    refreshJourei();
+  });
+  map.on("mouseenter", "buildings-3d", () => { map.getCanvas().style.cursor = "pointer"; });
+  map.on("mouseleave", "buildings-3d", () => {
+    map.getCanvas().style.cursor = "";
+    document.getElementById("hover-info").style.display = "none";
+  });
+  map.on("mousemove", "buildings-3d", e => {
+    if (!e.features || !e.features.length) return;
+    const p = e.features[0].properties;
+    const el = document.getElementById("hover-info");
+    el.style.display = "block";
+    el.innerHTML =
+      "<b>" + (p.zone_now_name || "用途地域なし") + "</b>　" +
+      fmt(p.h, 1) + " m / " + (p.storeys != null ? p.storeys + "階" : "階数なし") + "<br>" +
+      '<span style="color:#5b6470;">容積消化率 </span>' +
+      (p.used_ratio != null && p.used_ratio !== "" ? fmt(p.used_ratio, 2) : "—");
+  });
+}
+
+function refreshColors() {
+  if (map.getLayer("buildings-3d")) {
+    map.setPaintProperty("buildings-3d", "fill-extrusion-color", buildingColorExpr());
+  }
+}
+
+/* ---- 色分けとレバーの連動（2026-08-24 本人指示）----------------------------
+   用途地域境のレバーを動かすと、棟の色は「線を動かしたときの色」
+   （赤＝高さ20m超で既存不適格／灰青＝外れたが上限内／緑＝線を越えた）に変わる。
+   このとき「用途地域」「容積消化率」の色分けが乗っていると、その色に隠れて見えない。
+   → レバーを動かした時点で色分けを外す。外したあとは手で個別にON/OFFできる。
+   ★「現行」に戻したときは、外す前に選んでいたものへ戻す（外しっぱなしだと灰一色になるため）。
+     ただし途中で手で押した場合は、その選択を優先する（記憶を捨てる）。 */
+let colorModeBeforeLine = null;
+
+function setColorMode(m) {
+  colorMode = m;
+  document.querySelectorAll("#color-mode button").forEach(b => {
+    b.classList.toggle("active", b.dataset.mode === colorMode);
+  });
+  refreshColors();
+  refreshPanel();
+}
+
+function dropColorModeForLine() {
+  if (colorMode === "plain") return;
+  colorModeBeforeLine = colorMode;
+  setColorMode("plain");
+}
+
+function restoreColorModeAfterLine() {
+  if (!colorModeBeforeLine) return;
+  const m = colorModeBeforeLine;
+  colorModeBeforeLine = null;
+  setColorMode(m);
+}
+
+/* ---------------- ポップアップ ---------------- */
+function fmt(v, d) {
+  if (v === null || v === undefined || v === "") return "—";
+  const n = Number(v);
+  return isNaN(n) ? String(v) : n.toFixed(d === undefined ? 0 : d);
+}
+const H_SRC_LABEL = { measured: "measuredHeight", gen: "gen「建物高さ」", storeys: "階数×3m", default: "既定値3m" };
+
+function showPopup(feature) {
+  const p = feature.properties;
+  const rows = [
+    ["用途地域", (p.zone_now_name || "—") + (p.far_now ? "（指定容積率 " + p.far_now + "%）" : "")],
+    ["高さ", fmt(p.h, 1) + " m　<span style='color:#5b6470'>" + (H_SRC_LABEL[p.h_src] || p.h_src) + "</span>"],
+    ["階数", p.storeys != null ? p.storeys + " 階" : "—"],
+    ["延床面積", p.tfa != null && p.tfa !== "" ? fmt(p.tfa, 0) + " m²" : "—"],
+    ["建築面積", p.fpa != null && p.fpa !== "" ? fmt(p.fpa, 0) + " m²" : "—"],
+    ["棟の指定容積率／建蔽率",
+      (p.far_spec != null && p.far_spec !== "" ? fmt(p.far_spec, 0) + "%" : "—") + " / " +
+      (p.bcr_spec != null && p.bcr_spec !== "" ? fmt(p.bcr_spec, 0) + "%" : "—")],
+    ["許容延床（概算）", p.cap_now != null && p.cap_now !== "" ? fmt(p.cap_now, 0) + " m²" : "—"],
+    ["容積消化率", p.used_ratio != null && p.used_ratio !== "" ? fmt(p.used_ratio, 2) : "—"],
+    ["用途コード", p.usage || "—"],
+    ["耐火構造区分", p.fireproof || "—"],
+    ["大宮駅／新都心駅からの距離", fmt(p.dist, 0) + " m ／ " + fmt(p.dist_ss, 0) + " m"]
+  ];
+  const html =
+    "<h3>" + (p.lod2 === true || p.lod2 === "true" ? "LOD2 " : "") + "建物</h3>" +
+    rows.map(r => '<div class="popup-row"><span class="k">' + r[0] + '</span><span>' + r[1] + "</span></div>").join("") +
+    '<div class="popup-note">' + String(p.id).replace("bldg_", "") + "</div>";
+
+  new maplibregl.Popup({ closeButton: true, maxWidth: "300px" })
+    .setLngLat(polyFirstPoint(feature.geometry))
+    .setHTML(html)
+    .addTo(map);
+}
+function polyFirstPoint(g) {
+  if (g.type === "Polygon") return g.coordinates[0][0];
+  if (g.type === "MultiPolygon") return g.coordinates[0][0][0];
+  return map.getCenter();
+}
+
+
+
+
+/* =========================================================================
+   ランドマーク。一瞥で場所が分かるように文字ごと置く。
+   グリフ（フォント）をCDNから読まない方針なので symbol レイヤは使わず、
+   HTMLマーカーで描く。オフラインでも必ず出る。
+   ========================================================================= */
+const LANDMARKS = [
+  { lnglat: OMIYA, color: "#1f2328", label: "大宮駅",
+    sub: "徒歩15分圏＝半径1200m",
+    detail: "対象範囲の北の極。ここから半径1200m（＝徒歩15分・不動産表示規約の80m/分換算）の建物を "
+          + "PLATEAU さいたま市 2025年度 から抽出している。" },
+  { lnglat: SHINTOSHIN, color: "#1f6f5c", label: "さいたま新都心駅",
+    sub: "徒歩15分圏＝半径1200m",
+    detail: "対象範囲の南の極。大宮駅から南南東へ1,642m。2駅の徒歩15分圏は重なっており、"
+          + "その重なりと、2つの円が互いに移動するときに掃過する帯を合わせたものが本デモの対象範囲。"
+          + "座標は国土地理院の住所検索による。" },
+  { lnglat: [139.63660, 35.89210], color: "#1a1d21", square: true, label: "さいたま市 新庁舎 予定地",
+    sub: "地上19階・最高94m／2031年度めど",
+    detail: "さいたま市の新しい本庁舎の整備予定地（大宮区北袋町一丁目603番地 外）。"
+          + "令和4年4月に市役所の位置に関する条例の改正議案が可決され、令和13年度（2031年度）の移転を目指している。"
+          + "さいたま新都心駅から南東へ約330m、大宮駅から南南東へ約1.9km。"
+          + "<br><b>基本設計（令和8年4月）が公表済み：</b>敷地 約15,000㎡／建築面積 約10,000㎡／"
+          + "延床 約64,000㎡（容積対象 約50,000㎡）／容積率 約330%／建蔽率 約67%／"
+          + "<b>地下1階・地上19階・最高高さ 約94m</b>／免震構造。"
+          + "敷地は商業地域・防火地域・指定容積率400%・指定建蔽率80%・高さ制限なし。"
+          + "<br>★この移転が、大宮駅と新都心のあいだの用途地域をどう扱うかという問いの出発点になっている。"
+          + "右パネルの「新庁舎を建てる」ボタンで、この諸元のまま条例の説明対象を計算できる。" }
+];
+
+function addLandmarks() {
+  LANDMARKS.forEach(lm => {
+    const el = document.createElement("div");
+    el.className = "lm";
+    el.innerHTML = '<span class="dot' + (lm.square ? " sq" : "") + '" style="background:' + lm.color + '"></span>' +
+      '<span class="tx">' + lm.label + "<small>" + lm.sub + "</small></span>";
+    const mk = new maplibregl.Marker({ element: el, anchor: "left" }).setLngLat(lm.lnglat).addTo(map);
+    el.addEventListener("click", () => {
+      new maplibregl.Popup({ closeButton: true, maxWidth: "290px" })
+        .setLngLat(lm.lnglat)
+        .setHTML("<h3>" + lm.label + "</h3><div style='line-height:1.6'>" + lm.detail + "</div>")
+        .addTo(map);
+    });
+  });
+}
+
+/* ---- 丁目までの地名 ----------------------------------------------------
+   出所＝e-Stat 令和2年国勢調査 小地域（町丁・字等別）境界データ（世界測地系経緯度）。
+   面積最大の外環の重心を1点に落として `data/chome_omiya.geojson` に焼いてある
+   （生成＝`python3 build_chome.py`）。実行時に外部へ取りに行かない＝会場のネットが落ちても出る。
+   ★MapLibreの symbol レイヤは glyphs（フォント）を外部から取る必要があり、
+     このスタイルは glyphs を持っていないので使えない。HTMLマーカーで描く。
+   ズームを引いたときは面積の大きい丁目だけ残す（62枚が重ならないように）。 */
+let chome = { type: "FeatureCollection", features: [] };
+const chomeMarkers = [];
+let showChome = true;
+
+function addChomeLabels() {
+  chome.features.forEach(f => {
+    const el = document.createElement("div");
+    el.className = "chome";
+    el.textContent = f.properties.name;
+    const mk = new maplibregl.Marker({ element: el, anchor: "center" })
+      .setLngLat(f.geometry.coordinates).addTo(map);
+    chomeMarkers.push({ mk: mk, el: el, area: Number(f.properties.area) || 0 });
+  });
+  updateChomeLabels();
+  map.on("zoom", updateChomeLabels);
+}
+
+/* ズームに応じて出す下限面積を変える。引くほど大きい丁目だけ。 */
+function updateChomeLabels() {
+  const z = map.getZoom();
+  const minArea = z >= 15.5 ? 0 : z >= 14.5 ? 40000 : z >= 13.5 ? 90000 : 200000;
+  chomeMarkers.forEach(c => {
+    const on = showChome && c.area >= minArea;
+    c.el.style.display = on ? "" : "none";
+    c.el.classList.toggle("sm", c.area < 120000);
+  });
+}
+
+/* ---- 高度地区（絶対高さの上限）のラベルと一覧 ---------------------------
+   ★データは最初から持っている（koudo_omiya.geojson の hmax＝15 または 20）。
+   画面には紫の破線しか出ておらず「何mの地区なのか」が読めなかったので、
+   ①上限の高さ（15m／20m）に半透明の板（厚さ50cm）を浮かせる ②上限値のラベル ③一覧のモーダル を足した。
+   MapLibreの symbol レイヤは使えない（このスタイルは glyphs を持たない）＝丁目名と同じHTMLマーカー。 */
+const KOUDO_COLOR = { 15: "#5e3fa0", 20: "#a07bd4" };
+const koudoMarkers = [];
+let showKoudo = false;
+
+/* 多角形の「中に必ず入る」代表点。
+   ★重心をそのまま使わない。凹形だと外に出るし、経緯度のまま shoelace を回すと桁が落ちる
+   （2026-08-22 の重心バグ＝棟が250m飛んだ）。
+   → 平面近似の重心を出し、中に入っていなければ その緯度で内部の最長区間の中点を採る。 */
+function polyRepPoint(ring) {
+  const lat0 = ring[0][1], k = Math.cos(lat0 * Math.PI / 180);
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const x1 = (ring[i][0] - ring[0][0]) * k, y1 = ring[i][1] - ring[0][1];
+    const x2 = (ring[i + 1][0] - ring[0][0]) * k, y2 = ring[i + 1][1] - ring[0][1];
+    const f = x1 * y2 - x2 * y1;
+    a += f; cx += (x1 + x2) * f; cy += (y1 + y2) * f;
+  }
+  let pt = null;
+  if (Math.abs(a) > 1e-14) {
+    pt = [ring[0][0] + (cx / (3 * a)) / k, ring[0][1] + cy / (3 * a)];
+    if (ptInRing(pt[0], pt[1], ring)) return { pt: pt };
+  }
+  // 重心が外に出た場合：その緯度で内部の最長区間の中点
+  const yc = pt ? pt[1] : (ring[0][1] + ring[(ring.length / 2) | 0][1]) / 2;
+  const xs = [];
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [x1, y1] = ring[i], [x2, y2] = ring[i + 1];
+    if ((y1 > yc) === (y2 > yc)) continue;
+    xs.push(x1 + (yc - y1) / (y2 - y1) * (x2 - x1));
+  }
+  xs.sort((u, v) => u - v);
+  let best = null, w = -1;
+  for (let i = 0; i + 1 < xs.length; i += 2) {
+    if (xs[i + 1] - xs[i] > w) { w = xs[i + 1] - xs[i]; best = (xs[i] + xs[i + 1]) / 2; }
+  }
+  return { pt: [best != null ? best : ring[0][0], yc] };
+}
+
+/* リングの面積(m²)。ラベルを出す下限に使う */
+function ringAreaM2(ring) {
+  const lat0 = ring[0][1], k = Math.cos(lat0 * Math.PI / 180);
+  let a = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const x1 = (ring[i][0] - ring[0][0]) * k, y1 = ring[i][1] - ring[0][1];
+    const x2 = (ring[i + 1][0] - ring[0][0]) * k, y2 = ring[i + 1][1] - ring[0][1];
+    a += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(a) / 2 * 111320 * 111320;
+}
+
+/* 板の厚み（m）。★上端が絶対高さの上限。厚みは上限より下側に付ける。
+   0 にすると真横から見たとき板が線に潰れて高さが読めない（2026-08-24 本人指摘）。 */
+const KOUDO_SLAB = 0.5;
+
+/* 輪郭を「点線」として空中に浮かせるための小さな四角の列を作る。
+   MapLibreは線を浮かせられないので、破線の"ダッシュ1本"を1枚の四角にして fill-extrusion で持ち上げる。
+   線分をまたいで位相を引き継ぐので、頂点で刻みが乱れない。 */
+const KOUDO_DASH = 18, KOUDO_GAP = 12, KOUDO_HALFW = 4;   // m
+
+function dashedRingQuads(ring, out) {
+  const kx = Math.cos(ring[0][1] * Math.PI / 180) * 111320, ky = 111320;
+  const per = KOUDO_DASH + KOUDO_GAP;
+  let phase = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const ax = ring[i][0], ay = ring[i][1];
+    const dx = (ring[i + 1][0] - ax) * kx, dy = (ring[i + 1][1] - ay) * ky;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) continue;
+    const ux = dx / len, uy = dy / len;
+    const ox = (-uy * KOUDO_HALFW) / kx, oy = (ux * KOUDO_HALFW) / ky;
+    for (let sm = -(phase % per); sm < len; sm += per) {
+      const a0 = Math.max(sm, 0), a1 = Math.min(sm + KOUDO_DASH, len);
+      if (a1 <= a0) continue;
+      const p0x = ax + ux * a0 / kx, p0y = ay + uy * a0 / ky;
+      const p1x = ax + ux * a1 / kx, p1y = ay + uy * a1 / ky;
+      out.push([[[p0x + ox, p0y + oy], [p1x + ox, p1y + oy],
+                 [p1x - ox, p1y - oy], [p0x - ox, p0y - oy], [p0x + ox, p0y + oy]]]);
+    }
+    phase += len;
+  }
+}
+
+/* 上限の高さごとに1フィーチャ（MultiPolygon）にまとめる */
+function koudoEdgeGeoJSON() {
+  const byH = {};
+  if (koudo) koudo.features.forEach(f => {
+    const hm = Number(f.properties.hmax), g = f.geometry;
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+    polys.forEach(poly => {
+      if (ringAreaM2(poly[0]) < 30000) return;      // 3ha未満の断片は描かない
+      if (!byH[hm]) byH[hm] = [];
+      poly.forEach(ring => dashedRingQuads(ring, byH[hm]));
+    });
+  });
+  return {
+    type: "FeatureCollection",
+    features: Object.keys(byH).map(hm => ({
+      type: "Feature",
+      properties: { hmax: Number(hm) },
+      geometry: { type: "MultiPolygon", coordinates: byH[hm] }
+    }))
+  };
+}
+
+function addKoudoLabels() {
+  if (!koudo) return;
+  koudo.features.forEach(f => {
+    const g = f.geometry, hm = Number(f.properties.hmax);
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+    polys.forEach(poly => {
+      const area = ringAreaM2(poly[0]);
+      if (area < 30000) return;               // 3ha未満は出さない（21パート中2つ）
+      const r = polyRepPoint(poly[0]);
+      const el = document.createElement("div");
+      el.className = "koudo-lab" + (hm === 20 ? " h20" : "");
+      el.textContent = hm + "ｍ";
+      el.title = f.properties.name + "／絶対高さの上限 " + hm + "m／"
+               + f.properties.notice + "（" + f.properties.date + "）";
+      const mk = new maplibregl.Marker({ element: el, anchor: "center" })
+        .setLngLat(r.pt).addTo(map);
+      koudoMarkers.push({ el: el, area: area });
+    });
+  });
+  updateKoudoLabels();
+  map.on("zoom", updateKoudoLabels);
+}
+
+/* 引くほど大きい区画だけ残す（丁目名と同じ考え方） */
+function updateKoudoLabels() {
+  const z = map.getZoom();
+  const minArea = z >= 15 ? 30000 : z >= 14 ? 100000 : z >= 13 ? 400000 : 2000000;
+  koudoMarkers.forEach(c => {
+    c.el.style.display = (showKoudo && c.area >= minArea) ? "" : "none";
+  });
+}
+
+/* 一覧モーダルの中身。★数字は直書きせず、読み込んだGeoJSONから数える。 */
+function buildKoudoModal() {
+  const city = document.getElementById("koudo-city");
+  const here = document.getElementById("koudo-here");
+  if (!city || !here || !koudo) return;
+
+  city.innerHTML =
+    '<table><tr><th>地区名</th><th>絶対高さの上限</th><th>最低限</th><th>区画数</th><th>面積（県GIS）</th></tr>'
+    + '<tr><td><span style="display:inline-block;width:10px;height:10px;background:' + KOUDO_COLOR[15]
+    + ';opacity:.75;border-radius:2px;margin-right:5px"></span>高度地区（15ｍ地区）</td>'
+    + '<td><b>15 m</b></td><td>定めなし</td><td>39</td><td>5,367.2 ha</td></tr>'
+    + '<tr><td><span style="display:inline-block;width:10px;height:10px;background:' + KOUDO_COLOR[20]
+    + ';opacity:.75;border-radius:2px;margin-right:5px"></span>高度地区（20ｍ地区）</td>'
+    + '<td><b>20 m</b></td><td>定めなし</td><td>35</td><td>2,512.1 ha</td></tr>'
+    + '<tr><td>（指定なし）</td><td><b>上限なし</b></td><td>—</td><td>—</td><td>—</td></tr></table>'
+    + '<p class="meta">埼玉県GISのさいたま市域 74区画。<b>この2種類しかありません</b>'
+    + '（最低限高度地区・15ｍ／20ｍ以外の指定は0件）。</p>';
+
+  // この画面の範囲＝読み込んだ koudo の実データから数える
+  const agg = {};
+  koudo.features.forEach(f => {
+    const p = f.properties, g = f.geometry;
+    const key = p.hmax + "|" + p.name + "|" + p.notice + "|" + p.date;
+    const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+    let a = 0;
+    polys.forEach(poly => {
+      a += ringAreaM2(poly[0]);
+      for (let i = 1; i < poly.length; i++) a -= ringAreaM2(poly[i]);
+    });
+    if (!agg[key]) agg[key] = { n: 0, a: 0 };
+    agg[key].n++; agg[key].a += a;
+  });
+  let rows = '<table><tr><th>地区名</th><th>上限</th><th>区画数</th><th>面積（実測）</th><th>告示</th></tr>';
+  Object.keys(agg).sort().forEach(k => {
+    const [hm, name, notice, date] = k.split("|");
+    const v = agg[k];
+    rows += '<tr><td><span style="display:inline-block;width:10px;height:10px;background:'
+      + (Number(hm) === 15 ? KOUDO_COLOR[15] : KOUDO_COLOR[20])
+      + ';opacity:.75;border-radius:2px;margin-right:5px"></span>' + name + '</td>'
+      + '<td><b>' + Number(hm) + ' m</b></td><td>' + v.n + '</td>'
+      + '<td>' + (v.a / 10000).toFixed(1) + ' ha</td>'
+      + '<td>' + notice + '<br><span class="meta">' + date + '</span></td></tr>';
+  });
+  rows += '</table>';
+  here.innerHTML = rows
+    + '<p class="meta"><b>動かす線の住居側（第二種住居地域）は「20ｍ地区」</b>です。'
+    + '商業側は高度地区の指定がありません＝絶対高さの上限なし。'
+    + 'この非対称が、線を後退させたときに既存不適格が出る理由そのものです。</p>';
+}
+
+/* ---- 道路（PLATEAU udx/tran） ------------------------------------------
+   tran:Road の面。6.5MBあるので、ボタンが最初に押されたときだけ読む。
+   生成＝`python3 build_roads.py`（zipから該当18メッシュだけ読む・展開しない）。 */
+let roadsLoading = false, roadsLoaded = false;
+
+async function ensureRoads(btn) {
+  if (roadsLoaded || roadsLoading) return roadsLoaded;
+  roadsLoading = true;
+  const label = btn ? btn.textContent : null;
+  if (btn) { btn.textContent = "道路 …"; btn.disabled = true; }
+  try {
+    const r = await loadJSON(DATA.roads);
+    map.addSource("roads", { type: "geojson", data: r });
+    /* ★建物より下に敷く。ここのIDを間違えると before が undefined になり、
+       MapLibreは黙って最前面に積む（2026-08-23 に "bldg-3d" と書いて建物の上に出た）。
+       区域の面（zones-fill/line）より上・建物より下が正しい位置。 */
+    const before = ["buildings-3d", "zones-line", "zones-fill"].find(id => map.getLayer(id));
+    if (!before) console.warn("道路を差し込む基準レイヤが見つかりません（最前面になります）");
+    map.addLayer({
+      id: "roads-fill", type: "fill", source: "roads",
+      paint: {
+        // 一般国道・都道府県道は濃く、市町村道とその他は淡く
+        "fill-color": ["match", ["get", "fn"],
+          "1", "#8f9aa5", "2", "#8f9aa5", "5", "#8f9aa5",
+          "3", "#9aa6b1", "4", "#b3bcc5", "#c3cad1"],
+        "fill-opacity": 0.85
+      }
+    }, before);
+    map.addLayer({
+      id: "roads-line", type: "line", source: "roads",
+      paint: { "line-color": "#7c8792", "line-width": 0.4, "line-opacity": 0.5 }
+    }, before);
+    roadsLoaded = true;
+  } catch (err) {
+    if (btn) { btn.classList.remove("active"); btn.title = "道路データを読めません：" + err.message; }
+    console.error(err);
+  } finally {
+    roadsLoading = false;
+    if (btn) { btn.textContent = label; btn.disabled = false; }
+  }
+  return roadsLoaded;
+}
+
+/* 対象範囲の輪郭。
+   2駅それぞれの半径1200m（＝徒歩15分・80m/分）の円と、その2円を互いに
+   移動させたときに掃過される帯を合わせた形＝2駅を結ぶ線分から1200m以内。
+   数学的には線分のミンコフスキー和で、カプセル（スタジアム）形になる。
+   両端の半円＋2本の直線で1本のリングとして描く。 */
+function capsuleRing(a, b, rM, n) {
+  const A = toM(a[0], a[1]), B = toM(b[0], b[1]);
+  const ang = Math.atan2(B[1] - A[1], B[0] - A[0]);
+  const pts = [];
+  // B側の半円（ang-90° → ang+90°）
+  for (let i = 0; i <= n; i++) {
+    const t = ang - Math.PI / 2 + Math.PI * i / n;
+    pts.push(toLngLat(B[0] + Math.cos(t) * rM, B[1] + Math.sin(t) * rM));
+  }
+  // A側の半円（ang+90° → ang+270°）
+  for (let i = 0; i <= n; i++) {
+    const t = ang + Math.PI / 2 + Math.PI * i / n;
+    pts.push(toLngLat(A[0] + Math.cos(t) * rM, A[1] + Math.sin(t) * rM));
+  }
+  pts.push(pts[0]);
+  return { type: "FeatureCollection", features: [
+    { type: "Feature", geometry: { type: "LineString", coordinates: pts }, properties: {} }] };
+}
+
+/* =========================================================================
+   用途地域の制度表（建築基準法52条・53条・55条）
+   ★この案は用途地域の変更一般を扱う。商業⇔住居に限らない。
+     プロトタイプが実装しているのは、その中の1本（商業400% ↔ 第二種住居200%）だけ。
+   ========================================================================= */
+const ZONE_RULES = {
+  1:  { name: "第一種低層住居専用地域",   far: [50,60,80,100,150,200], bcr: [30,40,50,60], abs: [10,12] },
+  2:  { name: "第二種低層住居専用地域",   far: [50,60,80,100,150,200], bcr: [30,40,50,60], abs: [10,12] },
+  3:  { name: "第一種中高層住居専用地域", far: [100,150,200,300,400,500], bcr: [30,40,50,60], abs: null },
+  4:  { name: "第二種中高層住居専用地域", far: [100,150,200,300,400,500], bcr: [30,40,50,60], abs: null },
+  5:  { name: "第一種住居地域",           far: [100,150,200,300,400,500], bcr: [50,60,80], abs: null },
+  6:  { name: "第二種住居地域",           far: [100,150,200,300,400,500], bcr: [50,60,80], abs: null },
+  7:  { name: "準住居地域",               far: [100,150,200,300,400,500], bcr: [50,60,80], abs: null },
+  8:  { name: "田園住居地域",             far: [50,60,80,100,150,200], bcr: [30,40,50,60], abs: [10,12] },
+  9:  { name: "近隣商業地域",             far: [100,150,200,300,400,500], bcr: [60,80], abs: null },
+  10: { name: "商業地域",                 far: [200,300,400,500,600,700,800,900,1000,1100,1200,1300], bcr: [80], abs: null },
+  11: { name: "準工業地域",               far: [100,150,200,300,400,500], bcr: [50,60,80], abs: null },
+  12: { name: "工業地域",                 far: [100,150,200,300,400], bcr: [50,60], abs: null },
+  13: { name: "工業専用地域",             far: [100,150,200,300,400], bcr: [30,40,50,60], abs: null }
+};
+
+/* 高さの上限は2系統ある。
+   ① 建築基準法55条の絶対高さ制限＝低層住居専用・田園住居のみ（10m または 12m）。用途地域に付いてくる
+   ② それ以外の用途地域は、用途地域だけでは絶対高さの上限が無い。高度地区（都市計画）で定める
+   → 用途地域を変えたとき高さの上限がどう動くかは、両方を見ないと出せない。 */
+function koudoCapAt(lng, lat) {
+  if (!koudo) return null;
+  let best = null;
+  for (const f of koudo.features) {
+    const hm = f.properties.hmax;
+    if (hm == null) continue;
+    const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+    for (const poly of polys) {
+      if (!ptInRing(lng, lat, poly[0])) continue;
+      let inHole = false;
+      for (let i = 1; i < poly.length; i++) if (ptInRing(lng, lat, poly[i])) inHole = true;
+      if (!inHole && (best === null || hm < best)) best = hm;
+    }
+  }
+  return best;
+}
+
+/* 用途地域コードと位置から、絶対高さの上限(m)と根拠を返す */
+function heightCap(zoneFn, lng, lat) {
+  const r = ZONE_RULES[zoneFn];
+  if (r && r.abs) return { cap: r.abs[0], src: "建築基準法55条（" + r.name + "）" };
+  const k = koudoCapAt(lng, lat);
+  if (k != null) return { cap: k, src: "高度地区（" + k + "ｍ地区）" };
+  return { cap: null, src: "絶対高さの上限なし" };
+}
+
+/* =========================================================================
+   B1〜B4：用途地域の線を動かす
+   線の実体＝ 商業地域400%（urf_063e1b1e…）と 第二種住居地域200%（urf_0abc0461…）
+   の共有境界。実頂点4つでほぼ直線。大宮駅の西北西478m。
+   選定根拠＝ notes/line_candidates_20260822.md（900m圏192ペアの実測順位づけ）
+   ========================================================================= */
+
+const LINE = {
+  zoneA: { id: "urf_063e1b1e-9620-11ed-b271-088e90e0d0d4", fn: 10, name: "商業地域",       far: 400, bcr: 80 },
+  zoneB: { id: "urf_0abc0461-9620-11ed-a6c1-088e90e0d0d4", fn: 6,  name: "第二種住居地域", far: 200, bcr: 60 },
+  coords: [
+    [139.62075, 35.90866],
+    [139.61891, 35.90808],
+    [139.61759, 35.90766],
+    [139.61722, 35.90754]
+  ],
+  band: 160   // 線から左右この距離(m)以内の棟だけを対象にする
+};
+
+/* 許容延床の倍率。fpa（建築面積）が約分で消えるため、
+   敷地面積を知らなくても「上限が何倍になるか」は言える。
+   商業400/80 = 5.00 ／ 第二種住居200/60 = 3.33 → 1.50倍 */
+const RATIO_A = LINE.zoneA.far / LINE.zoneA.bcr;
+const RATIO_B = LINE.zoneB.far / LINE.zoneB.bcr;
+
+const M_PER_LON = 90200, M_PER_LAT = 111000;
+let lineOrigin = null, lineDir = null, lineNrm = null, sideSignA = 1;
+let lineLo = 0, lineHi = 0;   // 線「分」の広がり（線方向の座標・m）
+let offsetM = 0;          // 線を動かした量(m)。正 = 商業側を広げる
+let lineTargets = [];     // 対象になりうる棟（線から band m 以内）
+
+function toM(lng, lat) { return [(lng - lineOrigin[0]) * M_PER_LON, (lat - lineOrigin[1]) * M_PER_LAT]; }
+function toLngLat(x, y) { return [lineOrigin[0] + x / M_PER_LON, lineOrigin[1] + y / M_PER_LAT]; }
+
+function initLineGeometry() {
+  const c = LINE.coords;
+  lineOrigin = c[Math.floor(c.length / 2)];
+  const p0 = toM(c[0][0], c[0][1]);
+  const p1 = toM(c[c.length - 1][0], c[c.length - 1][1]);
+  const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+  const len = Math.hypot(dx, dy);
+  lineDir = [dx / len, dy / len];
+  lineNrm = [-lineDir[1], lineDir[0]];       // 法線
+  // ★線は「無限直線」ではなく、2区域が実際に共有している線分。
+  //   線方向にも範囲を持たせないと、遠く離れた同用途の棟まで巻き込む。
+  //   （対象範囲を2駅カプセルに広げたとき、帯内が982→1,295棟に増えて発覚。2026-08-23）
+  const alongs = c.map(pt => { const m = toM(pt[0], pt[1]); return m[0] * lineDir[0] + m[1] * lineDir[1]; });
+  lineLo = Math.min.apply(null, alongs);
+  lineHi = Math.max.apply(null, alongs);
+  // 商業地域(zoneA)の重心がどちら側かを調べ、正の向きを「商業側」に合わせる
+  const za = zones.features.find(f => f.properties.id === LINE.zoneA.id);
+  if (za) {
+    const r = za.geometry.coordinates[0];
+    let sx = 0, sy = 0;
+    r.forEach(pt => { const m = toM(pt[0], pt[1]); sx += m[0]; sy += m[1]; });
+    const cA = [sx / r.length, sy / r.length];
+    sideSignA = (cA[0] * lineNrm[0] + cA[1] * lineNrm[1]) >= 0 ? 1 : -1;
+  }
+}
+
+/* 線からの符号つき距離(m)。正 = 商業地域の側 */
+function signedDist(lng, lat) {
+  const m = toM(lng, lat);
+  return (m[0] * lineNrm[0] + m[1] * lineNrm[1]) * sideSignA;
+}
+
+/* 線方向の座標(m)。線分の範囲 [lineLo, lineHi] の外なら対象外にする */
+function alongDist(lng, lat) {
+  const m = toM(lng, lat);
+  return m[0] * lineDir[0] + m[1] * lineDir[1];
+}
+
+function featCentroid(g) {
+  const r = g.type === "Polygon" ? g.coordinates[0] : g.coordinates[0][0];
+  let x = 0, y = 0;
+  for (const p of r) { x += p[0]; y += p[1]; }
+  return [x / r.length, y / r.length];
+}
+
+/* フィーチャ単位の重心キャッシュ。
+   computeJourei() は当事者1棟につき全棟を走査するので、範囲を2駅カプセル
+   （25,467棟）に広げると featCentroid の呼び出しが約97万回になる。
+   1回だけ計算して feature に貼っておく（実測 158ms → 15ms）。 */
+function centroidOf(f) {
+  return f._c || (f._c = featCentroid(f.geometry));
+}
+
+function collectLineTargets() {
+  lineTargets = [];
+  buildings.features.forEach(f => {
+    const c = centroidOf(f);
+    const d = signedDist(c[0], c[1]);
+    if (Math.abs(d) > LINE.band) return;
+    // ★線分の外（線を延長した先）は対象外
+    const a = alongDist(c[0], c[1]);
+    if (a < lineLo || a > lineHi) return;
+    const p = f.properties;
+    // 対象はこの2区域の棟に限る（周辺の別区域を巻き込まない）
+    if (p.zone_now !== 10 && p.zone_now !== 6) return;
+
+    // capNow ＝ いまこの棟にかかっている絶対高さの上限（住居側の棟にだけ付く）
+    const hcNow = heightCap(p.zone_now, c[0], c[1]);
+    // capB ＝ 住居側になったときにかかる上限。
+    //   ★高度地区は棟の現在地では引けない。商業側には高度地区の指定が無いので
+    //     現在地で引くと必ず null になり、「既存不適格が1棟も出ない」という
+    //     結果になっていた（2026-08-23 発見）。
+    //   用途地域（さいたま市告示第752号）と高度地区（第753号）は2025-04-25に
+    //     連番で同日告示されており、この線と20ｍ地区の境界は線上27点の実測で
+    //     中央値1.0m・最大3.5mまで一致している。つまり用途地域の線が動けば
+    //     高度地区の線も一緒に動く。よって「線を越えた先の住居側」で引く。
+    const capB = capAcrossLine(c, d);
+    lineTargets.push({ f: f, d: d, p: p,
+                       k20: hcNow.cap != null, capNow: hcNow.cap, capNowSrc: hcNow.src,
+                       cap: capB.cap, capSrc: capB.src });
+  });
+}
+
+/* 棟の重心を線の向こう（住居側）へ十分に押し出した点で高度地区を引く。
+   押し出し量 = 線までの距離 + 40m（線の直近は高度地区の境界と1〜3.5mの誤差があるため） */
+function capAcrossLine(c, d) {
+  const m = toM(c[0], c[1]);
+  const push = d + 40;                       // d>0（商業側）なら住居側へ渡る
+  const x = m[0] - lineNrm[0] * sideSignA * push;
+  const y = m[1] - lineNrm[1] * sideSignA * push;
+  const ll = toLngLat(x, y);
+  return heightCap(LINE.zoneB.fn, ll[0], ll[1]);
+}
+
+/* ★既存不適格の判定は「絶対高さの上限」で行う。
+   延床ベース（延床 > 建築面積 × 容積率 ÷ 建蔽率）は、敷地面積を
+   「建築面積 ÷ 指定建蔽率」で推定するため、高層棟ほど敷地を過小に見積もり、
+   4階以上をほぼ全部「超過」と誤判定する（2026-08-22 実測。1〜3階では6.6%、
+   11階以上では100%が超過と出た）。敷地面積はPLATEAUにも市の建物現況調査にも無い。
+   → 高度地区の絶対高さ（m）と measuredHeight を突き合わせる方式に変更した。
+     こちらは敷地面積を必要とせず、実測値どうしの比較になる。
+   住居側＝高度地区20m地区（368棟が該当）／商業側＝高度地区の指定なし（0棟）。 */
+
+/* この線では、住居側にかかるのは高度地区20ｍ地区（さいたま市1618・2017-11-22）。
+   固定値ではなく heightCap() で引く。用途地域が変われば上限も変わる。 */
+let H_LIMIT_RESIDENTIAL = 20;   // 画面の文言に出す代表値。判定には使わない（棟ごとに heightCap() で引く）
+
+/* 状態： "over"    商業→住居。高さが20mの上限を超える＝既存不適格
+         "moved"   商業→住居。上限内におさまる
+         "freed"   住居→商業。高さの上限が外れ、許容延床も1.50倍になる
+         null      変化なし */
+function classify(t) {
+  const d = t.d, p = t.p;
+  if (offsetM > 0) {
+    if (d >= -offsetM && d < 0) return { state: "freed", ratio: RATIO_A / RATIO_B };
+  } else if (offsetM < 0) {
+    if (d >= 0 && d < -offsetM) {
+      // cap ＝ 住居側になったときにかかる上限（capAcrossLine で引いたもの）
+      const over = t.cap != null && Number(p.h) > t.cap;
+      return { state: over ? "over" : "moved", ratio: RATIO_B / RATIO_A };
+    }
+  }
+  return null;
+}
+
+const COLOR_GROW = "#2e7d4f", COLOR_OVER = "#b8262c", COLOR_SHRINK = "#e0a04a";
+
+/* ★動かした帯の色は、その帯が「何になるか」の用途地域の色そのものにする（2026-08-24 本人指示）。
+   ただし用途地域の面は fill-opacity 0.18 で薄いので、同じ色だと帯が沈む。
+   → 色相はそのままに、明度を下げ彩度を上げた濃い版を使う（HLSで L→44% / S→72%）。
+     商業地域(10)         #e8636b → 帯 #c11f29（輪郭 #a3141d）
+     第二種住居地域(6)     #f5e08c → 帯 #c1a11f（輪郭 #a38714）
+   ★赤い帯（商業になる範囲）と赤い棟（既存不適格 COLOR_OVER）は同時に出ない。
+     後退（offsetM<0）＝帯は住居色・棟は赤／拡大（offsetM>0）＝帯は商業色・棟は緑、と排他だから。 */
+const BAND_A_FILL = "#c11f29", BAND_A_LINE = "#a3141d";   // 商業地域になる範囲
+const BAND_B_FILL = "#c1a11f", BAND_B_LINE = "#a38714";   // 第二種住居地域に戻る範囲
+const COLOR_MOVED = "#8fa3b0";
+
+/* 住居側にいる棟の頭上に「絶対高さ20mの天井」を薄板で置く。
+   線を動かして商業側になると、この天井が消える＝規制が外れるのが目に見える。 */
+function ceilingGeoJSON() {
+  const fs = [];
+  lineTargets.forEach(t => {
+    // 天井は「いまその棟にかかっている上限」。線を越えて商業側になると消える
+    const capShown = t.d >= 0 ? t.cap : t.capNow;
+    if (capShown == null) return;
+    const stillResidential = t.d < -offsetM;   // 動かしたあとに住居側か
+    if (!stillResidential) return;
+    fs.push({ type: "Feature", geometry: t.f.geometry, properties: { cap: capShown } });
+  });
+  return { type: "FeatureCollection", features: fs };
+}
+
+function lineDerived() {
+  const feats = [], ghosts = [], caps = [];
+  lineTargets.forEach(t => {
+    const st = classify(t);
+    if (!st) return;
+    const g = t.f.geometry, p = t.p, h = Number(p.h);
+    let color;
+    if (st.state === "over") color = COLOR_OVER;
+    else if (st.state === "moved") color = COLOR_MOVED;
+    else color = COLOR_GROW;
+    feats.push({ type: "Feature", geometry: g, properties: { _c: color, _h: h } });
+
+    if (st.state === "over") {
+      // 20mを超えている部分だけを赤で切り出して見せる
+      caps.push({ type: "Feature", geometry: g,
+        properties: { _base: t.cap, _top: h, _ex: +(h - t.cap).toFixed(1) } });
+    }
+    if (st.state === "freed" && p.used_ratio != null && p.used_ratio !== ""
+        && Number(p.used_ratio) >= 0.9 && p.fpa && p.tfa && p.fpa * RATIO_A > p.tfa) {
+      // 高さの上限が外れ、かつ現行の容積を使い切っている棟だけゴーストを出す
+      ghosts.push({ type: "Feature", geometry: g, properties: { _base: h, _top: h * st.ratio } });
+    }
+  });
+  return {
+    changed: { type: "FeatureCollection", features: feats },
+    ghost: { type: "FeatureCollection", features: ghosts },
+    caps: { type: "FeatureCollection", features: caps }
+  };
+}
+
+function lineSourceRefresh() {
+  const d = lineDerived();
+  if (map.getSource("line-changed")) map.getSource("line-changed").setData(d.changed);
+  if (map.getSource("line-ghost")) map.getSource("line-ghost").setData(d.ghost);
+  if (map.getSource("line-caps")) map.getSource("line-caps").setData(d.caps);
+  if (map.getSource("the-line")) map.getSource("the-line").setData(lineGeoJSON());
+  if (map.getSource("the-band")) map.getSource("the-band").setData(bandGeoJSON());
+  if (map.getSource("ceiling")) map.getSource("ceiling").setData(ceilingGeoJSON());
+  updateGrabHandle();
+  renderLineStats();
+}
+
+/* ★「掴んで動かせる」ことを知らせる取っ手。
+   線の上に置き、触るまで脈打たせる。一度動かしたら小さく静かな表示に落とす。
+   （用途地域の線がドラッグできると気づけない、という指摘への対応・2026-08-23） */
+let grabMarker = null, grabEl = null, grabUsed = false;
+
+function addGrabHandle() {
+  const wrap = document.createElement("div");
+  wrap.className = "grabwrap";
+  grabEl = document.createElement("div");
+  grabEl.className = "grabme";
+  grabEl.innerHTML = '<span class="hand">✋</span><span class="lbl">ドラッグして動かす</span>';
+  const axis = document.createElement("div");
+  axis.className = "grabaxis";
+  axis.innerHTML = '<span class="ar a1">▲</span><span class="ar a2">▼</span>';
+  wrap.appendChild(axis);
+  wrap.appendChild(grabEl);
+  grabMarker = new maplibregl.Marker({ element: wrap, anchor: "center" })
+    .setLngLat(lineMidpoint()).addTo(map);
+  // 取っ手そのものからもドラッグを始められるようにする
+  wrap.addEventListener("mousedown", e => {
+    e.preventDefault(); e.stopPropagation();
+    startLineDrag();
+  });
+  updateGrabHandle();
+}
+
+/* 動かしたあとの線の中点 */
+function lineMidpoint() {
+  const c = movedLine();
+  const a = c[0], b = c[c.length - 1];
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+}
+
+/* 矢印を、線の法線が画面上でどちらを向いているかに合わせて回す。
+   ★線はWNW-ESEに走っているので、動く向きはほぼ南北。地図の bearing も
+     効くので、実座標ではなく map.project() で画面上の角度を出して回す。 */
+function updateGrabArrows() {
+  if (!grabEl) return;
+  const axis = grabEl.parentElement.querySelector(".grabaxis");
+  if (!axis) return;
+  const mid = lineMidpoint();
+  const m = toM(mid[0], mid[1]);
+  const far = toLngLat(m[0] + lineNrm[0] * 60, m[1] + lineNrm[1] * 60);
+  const a = map.project(mid), b = map.project(far);
+  const ang = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;  // 0 = 画面の右
+  axis.style.transform = "rotate(" + (ang - 90) + "deg)";        // ▼ が法線を向く
+}
+
+function updateGrabHandle() {
+  if (!grabMarker) return;
+  grabMarker.setLngLat(lineMidpoint());
+  updateGrabArrows();
+  grabEl.parentElement.classList.toggle("used", grabUsed);
+  const lbl = grabEl.querySelector(".lbl");
+  if (grabUsed) {
+    grabEl.classList.add("used");
+    lbl.textContent = offsetM === 0 ? "この線を動かす"
+      : (offsetM < 0 ? "商業を " + (-offsetM) + "m 後退" : "商業を " + offsetM + "m 拡大");
+  } else {
+    lbl.textContent = "ドラッグして動かす";
+  }
+}
+
+function markGrabUsed() {
+  if (!grabUsed) { grabUsed = true; }
+  updateGrabHandle();
+}
+
+/* ★動かしたあとの線。offsetM の符号と、線が動く向きの対応を1か所に閉じ込める。
+   定義：offsetM > 0 ＝ 商業が住居側へ「拡大」する。よって新しい境界は
+   住居側（符号つき距離が負の側）へ offsetM だけ動く。したがって -offsetM。
+   ⚠️ 2026-08-23：ここが +offsetM になっており、判定（classify）と線の描画が
+      逆向きだった。「後退」と表示しながら線は商業側へ広がっていた（本人指摘）。
+      ドラッグの取り込み側（signedDist）も併せて符号を反転させてある。 */
+function movedLine() { return shiftedLine(-offsetM * sideSignA); }
+
+function shiftedLine(off) {
+  return LINE.coords.map(c => {
+    const m = toM(c[0], c[1]);
+    return toLngLat(m[0] + lineNrm[0] * off, m[1] + lineNrm[1] * off);
+  });
+}
+
+function lineGeoJSON() {
+  const shifted = movedLine();
+  return {
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", geometry: { type: "LineString", coordinates: LINE.coords }, properties: { kind: "orig" } },
+      { type: "Feature", geometry: { type: "LineString", coordinates: shifted }, properties: { kind: "moved" } },
+      // 動かす線の両端（黒い球）。線の端がどこまでかを示す
+      { type: "Feature", geometry: { type: "Point", coordinates: shifted[0] }, properties: { kind: "cap" } },
+      { type: "Feature", geometry: { type: "Point", coordinates: shifted[shifted.length - 1] }, properties: { kind: "cap" } }
+    ]
+  };
+}
+
+/* 元の線と動かした線ではさまれた帯。ここが「入れ替わった範囲」。
+   線だけだと何が変わったのか分からない、という指摘への対応（2026-08-23）。 */
+function bandGeoJSON() {
+  if (offsetM === 0) return { type: "FeatureCollection", features: [] };
+  const shifted = movedLine();
+  const ringPts = LINE.coords.concat(shifted.slice().reverse());
+  ringPts.push(ringPts[0]);
+  return {
+    type: "FeatureCollection",
+    features: [{
+      type: "Feature",
+      geometry: { type: "Polygon", coordinates: [ringPts] },
+      properties: { dir: offsetM > 0 ? "expand" : "retreat" }
+    }]
+  };
+}
+
+function renderLineStats() {
+  const el = document.getElementById("line-stats");
+  if (offsetM === 0) {
+    el.innerHTML = '<div class="kv"><span class="k">線は現行の位置にあります</span></div>';
+    return;
+  }
+  let crossed = 0, over = 0, freedTall = 0, freedCeil = 0, growReady = 0, addFloor = 0, exMax = 0;
+  const overGrp = new Set(), crossGrp = new Set(), kGrp = new Set();
+  const exList = [];
+  lineTargets.forEach(t => {
+    const st = classify(t); if (!st) return;
+    const p = t.p, h = Number(p.h);
+    crossed++;
+    // grp（複合体キー）は延床・建築面積が無い棟には付かない（実測8.3%）。
+    // それを落とすと複合体数を過小に数えるので、無い棟は自分自身を1複合体とする。
+    const gk = p.grp || p.id;
+    crossGrp.add(gk);
+    if (st.state === "over") {
+      over++;
+      overGrp.add(gk);
+      const ex = h - t.cap;
+      exList.push(ex);
+      if (ex > exMax) exMax = ex;
+    } else if (st.state === "freed") {
+      if (t.k20) {
+        freedCeil++;
+        kGrp.add(gk);
+        // 「現に20mを超えている」は、20mの天井がかかっていた棟に限る。
+        // 高度地区の指定が無い棟が20mを超えていても、規制が外れたことにはならない。
+        if (t.capNow != null && h > t.capNow) freedTall++;
+      }
+      if (p.used_ratio != null && p.used_ratio !== "" && Number(p.used_ratio) >= 0.9
+          && p.fpa && p.tfa && p.fpa * RATIO_A > p.tfa / 1.25) {
+        growReady++;
+        addFloor += (p.fpa * RATIO_A - p.tfa / 1.25);
+      }
+    }
+  });
+  exList.sort((x, y) => x - y);
+  const exMed = exList.length ? exList[Math.floor(exList.length / 2)] : 0;
+
+  let html = '<div class="kv"><span class="k">操作</span><span class="v">' +
+    (offsetM > 0 ? "商業地域を住居側へ " + offsetM + "m 広げた" : "商業地域を " + (-offsetM) + "m 後退させた") +
+    "</span></div>";
+
+  if (offsetM < 0) {
+    html +=
+      kv("線から外れた棟", crossed.toLocaleString() + " 棟（複合体 " + crossGrp.size + "）") +
+      kv('<b>高さ20mの上限を超える棟</b>',
+         '<b style="color:' + COLOR_OVER + '">' + over.toLocaleString() + " 棟</b>（複合体 " + overGrp.size + "）") +
+      kv("超える高さ", over ? exMed.toFixed(1) + " m（中央値）／最大 " + exMax.toFixed(1) + " m" : "—") +
+      kv("許容延床の倍率", (RATIO_B / RATIO_A).toFixed(2) + " 倍");
+  } else {
+    html +=
+      kv("線を越えた棟", crossed.toLocaleString() + " 棟（複合体 " + crossGrp.size + "）") +
+      kv("<b>20mの天井が外れる棟</b>", "<b>" + freedCeil.toLocaleString() + " 棟</b>（複合体 " + kGrp.size + "・高度地区20ｍ地区にいた棟）") +
+      kv("うち現に20mを超えている棟",
+         freedTall ? freedTall.toLocaleString() + " 棟（既存不適格でなくなる）"
+                   : "0 棟（この範囲では、天井を現に超えている棟はありません）") +
+      kv("許容延床の倍率", (RATIO_A / RATIO_B).toFixed(2) + " 倍") +
+      kv("（参考）すぐ伸ばせる棟", growReady.toLocaleString() + " 棟 ／ " + Math.round(addFloor).toLocaleString() + " m²");
+  }
+  html += '<div class="note" style="margin-top:8px;">' +
+    '既存不適格の判定は<b>高度地区（20ｍ地区）の絶対高さ</b>と実測の建物高さの比較。' +
+    '敷地面積を使わないので推定を含まない。' +
+    '<br>許容延床の倍率は 容積率÷建蔽率 の比（400/80 ÷ 200/60）。建築面積が約分で消えるため敷地面積を必要としない。' +
+    '</div>';
+  el.innerHTML = html;
+}
+
+function addLineLayers() {
+  initLineGeometry();
+  collectLineTargets();
+  const d = lineDerived();
+
+  map.addSource("line-changed", { type: "geojson", data: d.changed });
+  map.addSource("line-ghost", { type: "geojson", data: d.ghost });
+  map.addSource("line-caps", { type: "geojson", data: d.caps });
+  map.addSource("koudo", { type: "geojson", data: koudo });
+  map.addSource("the-line", { type: "geojson", data: lineGeoJSON() });
+  map.addSource("the-band", { type: "geojson", data: bandGeoJSON() });
+  map.addSource("ceiling", { type: "geojson", data: ceilingGeoJSON() });
+
+  map.addLayer({
+    id: "line-changed-3d", type: "fill-extrusion", source: "line-changed",
+    paint: {
+      "fill-extrusion-color": ["get", "_c"],
+      "fill-extrusion-height": ["get", "_h"],
+      "fill-extrusion-opacity": 0.95
+    }
+  });
+  map.addLayer({
+    id: "line-ghost-3d", type: "fill-extrusion", source: "line-ghost",
+    paint: {
+      "fill-extrusion-color": "#2e7d4f",
+      "fill-extrusion-base": ["get", "_base"],
+      "fill-extrusion-height": ["get", "_top"],
+      "fill-extrusion-opacity": 0.35
+    }
+  });
+  // 20mを超えている部分だけを赤で切り出す（＝条例上の争点そのもの）
+  map.addLayer({
+    id: "line-caps-3d", type: "fill-extrusion", source: "line-caps",
+    paint: {
+      "fill-extrusion-color": COLOR_OVER,
+      "fill-extrusion-base": ["get", "_base"],
+      "fill-extrusion-height": ["get", "_top"],
+      "fill-extrusion-opacity": 0.85
+    }
+  });
+  /* ★高度地区は「地面」ではなく「絶対高さ制限の高さ」に浮かせて描く（2026-08-24 本人指示）。
+     地面に塗ると"区域"にしか見えないが、15m／20m の高さに板を浮かせると
+     ★建物がその板を突き抜けているかどうかが目で見える＝既存不適格がそのまま絵になる。
+     これは2Dの地図では絶対に描けない（審査基準①-a「データの意義」に直結する）。
+
+     ⚠ MapLibre v5.24 には line-z-offset が無い（vendor/maplibre-gl.js を grep して確認）。
+       ＝線を空中に浮かせられない。浮かせられるのは fill-extrusion だけ。
+       → 面も外周も fill-extrusion で作る。
+         ・面   ＝ 厚さ0.2mの板。中身は「紫の点線の斜線ハッチ」のパターン画像
+         ・外周 ＝ 輪郭に沿って一定間隔で置いた小さな四角（＝点線）を同じ高さに浮かせる
+     ⚠ fill-extrusion-opacity を1未満にすると深度書き込みが切れて前後関係が崩れる。
+       → 不透明度は1のまま。透け感はパターン画像のアルファで作る。 */
+  map.addSource("koudo-edge", { type: "geojson", data: koudoEdgeGeoJSON() });
+
+  /* ★板は「半透明の塗り＋50cmの厚み」（2026-08-24 本人指示）。
+     厚みが無いと、真横から見たときに板が線に潰れて高さが読めなかった。
+     ★上端が上限そのもの＝ base = hmax - KOUDO_SLAB, height = hmax。
+       50cmぶんは上限より下側に付ける（上に足すと上限を超えて見える）。
+     ⚠ fill-extrusion-opacity < 1 は深度書き込みが切れるので、他の3Dとの前後関係が
+       完全には正しくならない（MapLibreの仕様）。半透明にする以上これは避けられない。 */
+  [15, 20].forEach(hm => {
+    map.addLayer({
+      id: "koudo-plane-" + hm, type: "fill-extrusion", source: "koudo",
+      filter: ["==", ["get", "hmax"], hm],
+      layout: { visibility: "none" },
+      paint: {
+        "fill-extrusion-color": KOUDO_COLOR[hm],
+        "fill-extrusion-base": hm - KOUDO_SLAB,
+        "fill-extrusion-height": hm,
+        "fill-extrusion-opacity": 0.38
+      }
+    });
+  });
+  /* 外周の点線は不透明のまま。半透明の板だけだと縁がぼやけて位置が読めない。
+     板と同じ 50cm の厚みにして、板の側面と面をそろえる。 */
+  map.addLayer({
+    id: "koudo-edge-3d", type: "fill-extrusion", source: "koudo-edge",
+    layout: { visibility: "none" },
+    paint: {
+      "fill-extrusion-color": ["case", ["==", ["get", "hmax"], 15], KOUDO_COLOR[15], KOUDO_COLOR[20]],
+      "fill-extrusion-base": ["-", ["get", "hmax"], KOUDO_SLAB],
+      "fill-extrusion-height": ["get", "hmax"],
+      "fill-extrusion-opacity": 1
+    }
+  });
+  map.addLayer({
+    id: "ceiling-3d", type: "fill-extrusion", source: "ceiling",
+    layout: { visibility: "none" },
+    paint: {
+      "fill-extrusion-color": "#7b4ea8",
+      // 画面共有の圧縮で潰れると「消えました」と言った瞬間に何も起きて見えない。
+      // 台本v2が最優先の視認性項目としているので、板は厚めにする。
+      "fill-extrusion-base": ["-", ["get", "cap"], 1.6],
+      "fill-extrusion-height": ["+", ["get", "cap"], 0.4],
+      "fill-extrusion-opacity": 0.75
+    }
+  });
+
+  // 入れ替わった帯（面）。色は「何になるか」の用途地域の色を濃くしたもの
+  map.addLayer({
+    id: "the-band-fill", type: "fill", source: "the-band",
+    paint: {
+      "fill-color": ["case", ["==", ["get", "dir"], "expand"], BAND_A_FILL, BAND_B_FILL],
+      // 用途地域の面（0.18）より濃くしないと帯が沈む
+      "fill-opacity": 0.28
+    }
+  }, "buildings-3d");
+  map.addLayer({
+    id: "the-band-line", type: "line", source: "the-band",
+    paint: {
+      "line-color": ["case", ["==", ["get", "dir"], "expand"], BAND_A_LINE, BAND_B_LINE],
+      "line-width": 1.8, "line-opacity": 0.9
+    }
+  });
+  map.addLayer({
+    id: "the-line-orig", type: "line", source: "the-line",
+    filter: ["==", ["get", "kind"], "orig"],
+    paint: { "line-color": "#5b6470", "line-width": 2, "line-dasharray": [2, 2] }
+  });
+  /* ★動かす線は鉄道の路線記号（黒白黒白）にする（2026-08-24 本人指示）。
+     下に黒の太線、その上に白の破線を重ねると、白の隙間から下の黒が出て
+     「黒・白・黒・白」に見える。両縁に黒が残るので輪郭も付く。
+     line-dasharray の単位は line-width の倍数なので、幅を変えたら見た目の刻みも変わる。 */
+  /* ★掴み先は「見えている黒い線」そのもの（id は従来どおり the-line-moved）。
+     透明な当たり判定レイヤだけに頼ると、それが効かなかったときに掴めなくなる。
+     ヘッドレスChromeでは map.loaded() が false のままで queryRenderedFeatures が
+     常に0を返すため、当たり判定は自動検証できない。だから「検証できない仕組み」に依存しない。
+     幅は従来の7から8へ（狭くなっていない）。 */
+  map.addLayer({
+    id: "the-line-moved", type: "line", source: "the-line",
+    filter: ["==", ["get", "kind"], "moved"],
+    layout: { "line-cap": "butt", "line-join": "round" },
+    paint: { "line-color": "#1f2328", "line-width": 8 }
+  });
+  map.addLayer({
+    id: "the-line-moved-dash", type: "line", source: "the-line",
+    filter: ["==", ["get", "kind"], "moved"],
+    layout: { "line-cap": "butt", "line-join": "round" },
+    paint: { "line-color": "#ffffff", "line-width": 5, "line-dasharray": [1.8, 1.8] }
+  });
+  /* 掴みやすさを足すだけの、幅の広い予備の当たり判定。これが効かなくても上で掴める。 */
+  map.addLayer({
+    id: "the-line-grab", type: "line", source: "the-line",
+    filter: ["==", ["get", "kind"], "moved"],
+    paint: { "line-color": "#1f2328", "line-width": 22, "line-opacity": 0.01 }
+  });
+  // 両端の黒い球
+  map.addLayer({
+    id: "the-line-cap", type: "circle", source: "the-line",
+    filter: ["==", ["get", "kind"], "cap"],
+    paint: {
+      "circle-radius": 6.5, "circle-color": "#1f2328",
+      "circle-stroke-width": 2, "circle-stroke-color": "#ffffff"
+    }
+  });
+
+  enableLineDrag();
+  addGrabHandle();
+  // 地図を回したり傾けたりしても矢印の向きを合わせ続ける
+  map.on("move", updateGrabArrows);
+  map.on("rotate", updateGrabArrows);
+  renderLineStats();
+}
+
+/* マウスで線をつまんで動かす（PC・マウス前提。タッチ対応はしない） */
+let lineDragging = false;
+
+/* 線本体からでも、取っ手からでも、同じ関数でドラッグを始める */
+function startLineDrag() {
+  lineDragging = true;
+  // 1回のドラッグにつき1度だけ外す（mousemove ごとに呼ぶと記憶が上書きされる）
+  dropColorModeForLine();
+  map.dragPan.disable();
+  map.getCanvas().style.cursor = "grabbing";
+  if (grabEl) grabEl.parentElement.style.cursor = "grabbing";
+  markGrabUsed();
+}
+
+function enableLineDrag() {
+  const canvas = map.getCanvas();
+  // 「掴める」ことが伝わるように grab / grabbing にする（ew-resize では伝わりにくい）
+  // 見えている線（the-line-moved）と、幅の広い予備（the-line-grab）の両方で掴める
+  ["the-line-moved", "the-line-grab", "the-line-cap"].forEach(id => {
+    map.on("mouseenter", id, () => { if (!lineDragging) canvas.style.cursor = "grab"; });
+    map.on("mouseleave", id, () => { if (!lineDragging) canvas.style.cursor = ""; });
+    map.on("mousedown", id, e => { e.preventDefault(); startLineDrag(); });
+  });
+  map.on("mousemove", e => {
+    if (!lineDragging) return;
+    // 線は movedLine() で -offsetM の位置に描かれるので、ここも符号を反転させる。
+    // これでマウスの位置に線が追従し、かつ判定と一致する。
+    offsetM = Math.max(-150, Math.min(150, -Math.round(signedDist(e.lngLat.lng, e.lngLat.lat))));
+    syncPresetButtons();
+    lineSourceRefresh();
+  });
+  map.on("mouseup", () => {
+    if (!lineDragging) return;
+    lineDragging = false;
+    map.dragPan.enable();
+    canvas.style.cursor = "";
+    if (grabEl) grabEl.parentElement.style.cursor = "grab";
+    if (offsetM === 0) restoreColorModeAfterLine();
+    computeAggregate();      // ドラッグ中は重いので、手を離したときだけ計算する
+    renderAggregate();
+    renderGauge();
+    refreshUnsatisfied();
+    markGrabUsed();
+  });
+}
+
+function syncPresetButtons() {
+  document.querySelectorAll("#preset button").forEach(b => {
+    b.classList.toggle("active", Number(b.dataset.offset) === offsetM);
+  });
+}
+
+document.getElementById("shincho-btn").addEventListener("click", () => toggleShincho(!shinchoOn));
+
+document.querySelectorAll("#preset button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    offsetM = Number(btn.dataset.offset);
+    if (offsetM === 0) restoreColorModeAfterLine(); else dropColorModeForLine();
+    markGrabUsed();
+    syncPresetButtons();
+    lineSourceRefresh();
+    computeAggregate();
+    renderAggregate();
+    renderGauge();
+    refreshUnsatisfied();
+    map.easeTo({ center: LINE.coords[1], zoom: 16.2, pitch: 60, bearing: -18, duration: 900 });
+  });
+});
+
+
+
+/* =========================================================================
+   フェーズC：条例が定める説明対象
+   さいたま市中高層建築物の建築及び大規模開発行為等に係る
+   紛争の防止及び調整に関する条例（平成13年5月1日 条例第266号）
+   ※2026-08-23に条文を取得して照合し、実装を5か所修正した
+     （→ notes/jourei_text_20260823.md）
+   ========================================================================= */
+
+const JOUREI = {
+  name: "さいたま市中高層建築物の建築及び大規模開発行為等に係る紛争の防止及び調整に関する条例",
+  short: "さいたま市 紛争防止条例",
+  no: "平成13年5月1日 条例第266号（平成21年7月1日施行）",
+  url: "https://www1.g-reiki.net/saitamat/reiki_honbun/r375RG00000771.html",
+  r1: 15,   // 敷地境界からの水平距離
+  r2: 50,   // 外壁からの水平距離
+  hours: [9, 10, 11, 12, 13, 14, 15]   // 真太陽時
+};
+
+/* 日影の水平面（第2条第2項第9号）
+   第1種・第2種低層住居専用地域は平均地盤面から1.5m、その他は4m */
+function shadowPlane(zoneFn) { return (zoneFn === 1 || zoneFn === 2) ? 1.5 : 4.0; }
+
+/* 別表（第2条関係）：その用途地域で「中高層建築物」になる高さの閾値
+   ア 低層住専 …… 軒高7m超 または 階数3以上
+   イ 中高層住専・住居・準住居・近隣商業(200%)・準工業(200%)・無指定 …… 10m超
+   ウ 近隣商業(200%以外)・商業・準工業(200%以外)・工業・工業専用 …… 15m超
+      （高さ10m超でア・イの地域に冬至日に日影を生じさせるものも含む） */
+function chukousouThreshold(zoneFn, far) {
+  if (zoneFn === 1 || zoneFn === 2) return { h: 7, note: "軒高7m超 または 階数3以上", div: "ア" };
+  if (zoneFn === 9 || zoneFn === 11) {
+    return far === 200 ? { h: 10, note: "高さ10m超", div: "イ" } : { h: 15, note: "高さ15m超", div: "ウ" };
+  }
+  if (zoneFn === 10 || zoneFn === 12 || zoneFn === 13) return { h: 15, note: "高さ15m超", div: "ウ" };
+  return { h: 10, note: "高さ10m超", div: "イ" };   // 中高層住専・住居・準住居・無指定
+}
+
+/* 太陽位置（真太陽時）。条例は「冬至日の真太陽時による午前9時から午後3時まで」。
+   真太陽時では正午が南中なので、時角 H = 15°×(真太陽時 − 12)。
+   標準時（JST）で計算すると南中が11:41になり9時と15時が非対称になる。それは条文と違う。 */
+const DEC_SOLSTICE = -23.44 * Math.PI / 180;
+function sunTrueSolar(hour, latDeg) {
+  const H = (15 * (hour - 12)) * Math.PI / 180;
+  const lat = latDeg * Math.PI / 180;
+  const sel = Math.sin(lat) * Math.sin(DEC_SOLSTICE) + Math.cos(lat) * Math.cos(DEC_SOLSTICE) * Math.cos(H);
+  const el = Math.asin(sel) * 180 / Math.PI;
+  const caz = (sel * Math.sin(lat) - Math.sin(DEC_SOLSTICE)) / (Math.cos(Math.asin(sel)) * Math.cos(lat));
+  let az = Math.acos(Math.max(-1, Math.min(1, caz))) * 180 / Math.PI;
+  az = H > 0 ? 180 + az : 180 - az;
+  return { el: el, az: az };
+}
+const SUN_SOLSTICE = JOUREI.hours.map(h => Object.assign({ h: h }, sunTrueSolar(h, OMIYA[1])));
+
+function hull(pts) {
+  const p = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const q of p) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+  for (let i = p.length - 1; i >= 0; i--) { const q = p[i];
+    while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+  lo.pop(); up.pop();
+  return lo.concat(up);
+}
+
+/* 影。日影は「平均地盤面からの高さ◯mの水平面に生ずる日影」なので、
+   地面ではなくその水平面まで落とす＝有効高さ = 建物高さ − 水平面の高さ。 */
+function shadowRing(ring, h, plane, sun) {
+  const hEff = h - plane;
+  if (sun.el <= 3 || hEff <= 0) return null;
+  const L = hEff / Math.tan(sun.el * Math.PI / 180);
+  const rad = ((sun.az + 180) % 360) * Math.PI / 180;
+  const dLon = Math.sin(rad) * L / M_PER_LON, dLat = Math.cos(rad) * L / M_PER_LAT;
+  return hull(ring.concat(ring.map(p => [p[0] + dLon, p[1] + dLat])));
+}
+
+function ptInRing(x, y, r) {
+  let ins = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + 1e-30) + xi)) ins = !ins;
+  }
+  return ins;
+}
+
+function distToRing(x, y, r) {
+  let best = Infinity;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const ax = (r[j][0] - x) * M_PER_LON, ay = (r[j][1] - y) * M_PER_LAT;
+    const bx = (r[i][0] - x) * M_PER_LON, by = (r[i][1] - y) * M_PER_LAT;
+    const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+    const t = L2 === 0 ? 0 : Math.max(0, Math.min(1, (-(ax * dx + ay * dy)) / L2));
+    const d = Math.hypot(ax + t * dx, ay + t * dy);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+function outerRing(g) { return g.type === "Polygon" ? g.coordinates[0] : g.coordinates[0][0]; }
+
+/* =========================================================================
+   敷地境界線の推定（2026-08-23 本人案）
+   ★条例の「近隣住民ア」は敷地境界線から15m。PLATEAUに敷地界は無い（uro:siteArea 0件）。
+     これまでは建物の外周で代用していたので、敷地境界より内側にあり、対象が少なく出ていた。
+   → 建物の外周を、面積が「建築面積 ÷ 指定建蔽率」になるまで外へ均等に膨らませ、
+     その輪郭を敷地境界とみなす。
+
+   ミンコフスキー和（外周を半径 t の円で膨らませる）の面積は
+       A(t) = A + P·t + π·t²      （A=元の面積, P=周長）
+   なので、t は2次方程式を解くだけで出る：
+       t = ( -P + √(P² + 4π(A_site - A)) ) / (2π)
+
+   ★そして「膨らませた輪郭までの距離」＝「元の外周までの距離 − t」が厳密に成り立つ。
+     したがって判定では多角形を作る必要がなく、15m の判定を (15 + t) m に置き換えるだけでよい。
+     描画のときだけ実際の輪郭を作る（offsetRing）。
+   ========================================================================= */
+function ringAreaPerim(r) {
+  let a = 0, p = 0;
+  const ox = r[0][0], oy = r[0][1];
+  for (let i = 0; i < r.length - 1; i++) {
+    const x0 = (r[i][0] - ox) * M_PER_LON,     y0 = (r[i][1] - oy) * M_PER_LAT;
+    const x1 = (r[i + 1][0] - ox) * M_PER_LON, y1 = (r[i + 1][1] - oy) * M_PER_LAT;
+    a += x0 * y1 - x1 * y0;
+    p += Math.hypot(x1 - x0, y1 - y0);
+  }
+  return { area: Math.abs(a / 2), perim: p, ccw: a > 0 };
+}
+
+/* 建物の外周を敷地境界まで広げるときの膨らませ量 t（m）。推定できなければ 0。 */
+function siteOffsetOf(f) {
+  if (f._t !== undefined) return f._t;
+  const r = outerRing(f.geometry);
+  const ap = ringAreaPerim(r);
+  const p = f.properties;
+  let siteArea = null;
+  if (p.site_area) {
+    siteArea = Number(p.site_area);              // 公表値がある棟（新庁舎）はそれを使う
+  } else if (p.bcr_spec) {
+    siteArea = ap.area / (Number(p.bcr_spec) / 100);   // 建築面積 ÷ 指定建蔽率
+  }
+  let t = 0;
+  if (siteArea && siteArea > ap.area && ap.perim > 0) {
+    const dA = siteArea - ap.area;
+    t = (-ap.perim + Math.sqrt(ap.perim * ap.perim + 4 * Math.PI * dA)) / (2 * Math.PI);
+  }
+  f._t = t;
+  f._siteA = siteArea || ap.area;     // 推定した敷地面積（表示用）
+  f._bldgA = ap.area;                 // 建築面積（外周の実面積）
+  return t;
+}
+
+/* 表示用：外周を t だけ外へ膨らませた輪郭（凸の角は円弧でつなぐ＝距離の定義と一致） */
+function offsetRing(r, t) {
+  if (t <= 0) return r;
+  const ap = ringAreaPerim(r);
+  const sgn = ap.ccw ? 1 : -1;                   // 外向き法線の符号を巻き方向から決める
+  const n = r.length - 1;
+  const M = i => [(r[i][0]) * M_PER_LON, (r[i][1]) * M_PER_LAT];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = M(i), b = M((i + 1) % n), c = M((i + 2) % n);
+    let ex = b[0] - a[0], ey = b[1] - a[1];
+    let L = Math.hypot(ex, ey) || 1; ex /= L; ey /= L;
+    const nx = ey * sgn, ny = -ex * sgn;         // 外向き法線
+    out.push([a[0] + nx * t, a[1] + ny * t], [b[0] + nx * t, b[1] + ny * t]);
+    // 次の辺との間の凸の角を円弧で埋める
+    let fx = c[0] - b[0], fy = c[1] - b[1];
+    const L2 = Math.hypot(fx, fy) || 1; fx /= L2; fy /= L2;
+    const mx = fy * sgn, my = -fx * sgn;
+    const cross = nx * my - ny * mx;
+    if (cross < -1e-12) {                        // 凸（外側に折れる）角だけ円弧
+      let a0 = Math.atan2(ny, nx), a1 = Math.atan2(my, mx);
+      let da = a1 - a0;
+      while (da <= -Math.PI) da += 2 * Math.PI;
+      while (da > Math.PI) da -= 2 * Math.PI;
+      const steps = Math.max(3, Math.ceil(Math.abs(da) / 0.12));
+      for (let k = 1; k < steps; k++) {
+        const ang = a0 + da * k / steps;
+        out.push([b[0] + Math.cos(ang) * t, b[1] + Math.sin(ang) * t]);
+      }
+    }
+  }
+  const ll = out.map(q => [q[0] / M_PER_LON, q[1] / M_PER_LAT]);
+  ll.push(ll[0]);
+  return ll;
+}
+
+let subject = null;
+
+/* 1棟を対象に、条例上の説明対象を確定する。
+   近隣住民ア ＝ 敷地境界15m以内 かつ 外壁50m以内（★AND。1つの号）
+   近隣住民イ ＝ 外壁から高さの2倍以内 かつ 冬至日の日影
+                 ★ただし商業地域・工業専用地域にあるものを除く
+   周辺住民   ＝ 近隣住民以外で、15m以内 または 日影の範囲 または 高さの2倍以内 */
+function computeJourei(subjFeat, hUse) {
+  const ring = outerRing(subjFeat.geometry);
+  const c = centroidOf(subjFeat);
+  // ★敷地境界線は建物の外周を t だけ外へ膨らませた輪郭とみなす（siteOffsetOf 参照）。
+  //   「膨らませた輪郭までの距離」＝「外周までの距離 − t」なので、15m の判定を (15+t) m にする。
+  //   50m と 高さの2倍 は条文が「外壁又はこれに代わる柱の面から」なので t を足さない。
+  const t = siteOffsetOf(subjFeat);
+  const zoneFn = subjFeat.properties.zone_now;
+  const plane = shadowPlane(zoneFn);
+  const shadows = [];
+  SUN_SOLSTICE.forEach(sn => { const r = shadowRing(ring, hUse, plane, sn); if (r) shadows.push({ h: sn.h, ring: r }); });
+  const reach2h = hUse * 2;
+
+  const kinA = [], kinB = [], shuu = [];
+  buildings.features.forEach(f => {
+    if (f === subjFeat) return;
+    const fc = centroidOf(f);
+    if (Math.abs(fc[0] - c[0]) * M_PER_LON > 500 || Math.abs(fc[1] - c[1]) * M_PER_LAT > 500) return;
+    const d = distToRing(fc[0], fc[1], ring);
+    const inShadow = shadows.some(sh => ptInRing(fc[0], fc[1], sh.ring));
+    const z = f.properties.zone_now;
+    const excluded = (z === 10 || z === 13);          // 商業地域・工業専用地域は近隣住民イから除外
+    // ア：敷地境界から15m以内（＝外周から 15+t 以内） かつ 外壁から50m以内
+    if (d <= JOUREI.r1 + t && d <= JOUREI.r2) { kinA.push(f); return; }
+    if (d <= reach2h && inShadow && !excluded) { kinB.push(f); return; }   // 近隣住民イ
+    if (d <= JOUREI.r1 + t || inShadow || d <= reach2h) shuu.push(f);      // 周辺住民
+  });
+  return { shadows: shadows, kinA: kinA, kinB: kinB, shuu: shuu, siteT: t,
+           siteRing: offsetRing(ring, t), bldgRing: ring,
+           reach2h: reach2h, h: hUse, plane: plane, zoneFn: zoneFn };
+}
+
+function jouSourceData(j) {
+  const sh = { type: "FeatureCollection", features: (j ? j.shadows : []).map(s => ({
+    type: "Feature", geometry: { type: "Polygon", coordinates: [s.ring.concat([s.ring[0]])] },
+    properties: { h: s.h } })) };
+  const tag = (arr, k) => arr.map(f => ({ type: "Feature", geometry: f.geometry, properties: { _k: k } }));
+  const tg = { type: "FeatureCollection", features: j ? tag(j.kinA, 1).concat(tag(j.kinB, 2)).concat(tag(j.shuu, 3)) : [] };
+  const su = { type: "FeatureCollection", features: j && subject ? [{ type: "Feature", geometry: subject.geometry, properties: {} }] : [] };
+  const st = { type: "FeatureCollection", features: (j && j.siteT > 0) ? [{
+    type: "Feature", geometry: { type: "Polygon", coordinates: [j.siteRing] },
+    properties: { t: +j.siteT.toFixed(1) } }] : [] };
+  return { shadows: sh, targets: tg, subject: su, site: st };
+}
+
+function addJoureiLayers() {
+  const d = jouSourceData(null);
+  map.addSource("jou-shadow", { type: "geojson", data: d.shadows });
+  map.addSource("jou-target", { type: "geojson", data: d.targets });
+  map.addSource("jou-subject", { type: "geojson", data: d.subject });
+  map.addSource("jou-site", { type: "geojson", data: d.site });
+
+  map.addLayer({ id: "jou-shadow-fill", type: "fill", source: "jou-shadow",
+    paint: { "fill-color": "#3b4a5a", "fill-opacity": 0.13 } }, "buildings-3d");
+  map.addLayer({ id: "jou-target-line", type: "line", source: "jou-target",
+    paint: {
+      "line-color": ["match", ["get", "_k"], 1, "#b8262c", 2, "#e08a2c", "#2b6cb0"],
+      "line-width": ["match", ["get", "_k"], 1, 2.4, 2, 1.6, 1.6]
+    } });
+  // 推定した敷地境界線（建物の外周を建蔽率ぶん外へ膨らませた輪郭）
+  map.addLayer({ id: "jou-site-fill", type: "fill", source: "jou-site",
+    paint: { "fill-color": "#111", "fill-opacity": 0.07 } }, "buildings-3d");
+  map.addLayer({ id: "jou-site-line", type: "line", source: "jou-site",
+    paint: { "line-color": "#111", "line-width": 1.6, "line-dasharray": [3, 2], "line-opacity": 0.85 } });
+  map.addLayer({ id: "jou-subject-line", type: "line", source: "jou-subject",
+    paint: { "line-color": "#111", "line-width": 3 } });
+  /* ★影の「面」は buildings-3d の下にあるので、建物が建て込んだところでは3Dに隠れて見えない。
+     どこまで影が届くのかが分かるよう、7時刻それぞれの輪郭線を建物の上に重ねる。
+     線が扇状に広がるので「9時から15時に動く影」であること自体が絵で分かる。 */
+  map.addLayer({ id: "jou-shadow-line", type: "line", source: "jou-shadow",
+    paint: { "line-color": "#3b4a5a", "line-width": 1, "line-opacity": 0.45 } });
+}
+
+function refreshJourei() {
+  const box = document.getElementById("jou-stats");
+  if (!subject) {
+    box.innerHTML = '<div class="note">棟をクリックすると、その棟を建てる場合に条例の説明対象になる棟が出ます。</div>';
+    ["jou-shadow", "jou-target", "jou-subject", "jou-site"].forEach(id => {
+      const src = map.getSource(id); if (src) src.setData({ type: "FeatureCollection", features: [] });
+    });
+    return;
+  }
+  const hUse = Number(subject.properties.h);
+  const j = computeJourei(subject, hUse);
+  const d = jouSourceData(j);
+  map.getSource("jou-shadow").setData(d.shadows);
+  map.getSource("jou-target").setData(d.targets);
+  map.getSource("jou-subject").setData(d.subject);
+  map.getSource("jou-site").setData(d.site);
+
+  const uniq = new Set();
+  [].concat(j.kinA, j.kinB).forEach(f => uniq.add(f.properties.grp || f.properties.id));
+  box.innerHTML =
+    kv("対象の棟の高さ", hUse.toFixed(1) + " m") +
+    kv('<span class="who wA"></span><span style="color:#b8262c">近隣住民ア（敷地境界15m かつ 外壁50m 以内）</span>', j.kinA.length + " 棟") +
+    kv('<span class="who wB"></span><span style="color:#e08a2c">近隣住民イ（高さの2倍 ' + j.reach2h.toFixed(0) + 'm 以内 かつ 冬至日の日影）</span>', j.kinB.length + " 棟") +
+    kv("<b>近隣住民 合計（説明義務・第9条1項）</b>", "<b>" + uniq.size + " 棟</b>") +
+    kv('<span class="who wC"></span><span style="color:#2b6cb0">周辺住民（求められたら説明・第9条2項）</span>', j.shuu.length + " 棟") +
+    kv("建築面積 → 推定した敷地面積",
+       (j.siteT > 0
+         ? Math.round(subject._bldgA).toLocaleString() + " ㎡ → <b>"
+           + Math.round(subject._siteA).toLocaleString() + " ㎡</b>（外へ +"
+           + j.siteT.toFixed(1) + " m）"
+         : "—（指定建蔽率が無く推定できない）")) +
+    '<div id="method-chip">📐 判定の前提（敷地境界・日影・除外）</div>';
+
+  /* ★長い注記はパネルに出さずモーダルへ。詳しく知りたい人しか見ないため（2026-08-23 本人指示） */
+  methodBodyHTML =
+    '<h4>敷地境界をどう出しているか</h4>' +
+    '<p>PLATEAUに敷地界（<code>uro:siteArea</code>）は<b>0件</b>。そこで<b>建物の外周を、面積が「建築面積 ÷ 指定建蔽率」に' +
+    'なるまで外へ均等に広げた輪郭</b>を敷地境界とみなしている（地図上の<b>破線</b>）。</p>' +
+    (j.siteT > 0
+      ? '<table><tr><th style="width:46%">この棟の建築面積</th><td>' + Math.round(subject._bldgA).toLocaleString() + ' ㎡</td></tr>' +
+        '<tr><th>推定した敷地面積</th><td>' + Math.round(subject._siteA).toLocaleString() + ' ㎡</td></tr>' +
+        '<tr><th>外へ広げた幅</th><td><b>' + j.siteT.toFixed(1) + ' m</b></td></tr>' +
+        '<tr><th>「敷地境界から15m」の実際の判定</th><td>外周から <b>' + (15 + j.siteT).toFixed(1) + ' m</b></td></tr></table>'
+      : '<p>この棟は指定建蔽率が無いため推定できず、外周をそのまま敷地境界として扱っている。</p>') +
+    '<p><b>広げているのは「敷地境界線」を起点にする条件だけ。</b>' +
+    '<b>50m と 高さの2倍 は広げていない</b>——条文が「外壁又はこれに代わる柱の面から」と書いているため。</p>' +
+    '<h4>日影の計算条件</h4>' +
+    '<p><b>冬至日の真太陽時9〜15時</b>（1時間ごと' + SUN_SOLSTICE.length + '時刻）に、' +
+    '<b>平均地盤面から' + j.plane + 'm の水平面</b>に生ずる影（第2条第2項第9号）。</p>' +
+    '<p><b>等時間日影図ではない。</b>「何時間かかるか」ではなく「7時刻のどれかで影に入るか」で判定している。' +
+    'また<b>地形は平坦として計算</b>している。</p>' +
+    '<h4>条文上の除外</h4>' +
+    '<p>近隣住民イからは<b>商業地域・工業専用地域にあるものを除いている</b>（同項第7号イ ただし書き）。</p>';
+}
+
+
+/* ---- C4：線を動かしたとき、変化した棟すべての説明対象を合算する ----
+   ドラッグ中に回すと重いので、プリセット押下と mouseup のときだけ計算する。 */
+let methodBodyHTML = "";
+let aggCache = null;
+
+function computeAggregate() {
+  if (offsetM === 0) { aggCache = null; return; }
+  const subjects = [];
+  lineTargets.forEach(t => {
+    const st = classify(t); if (!st) return;
+    if (offsetM < 0) {
+      // 商業を後退：高さの上限を超える棟＝説明が要る側の当事者
+      if (st.state === "over") subjects.push({ f: t.f, h: Number(t.p.h) });
+    } else {
+      // 商業を拡大：高さの上限が外れ、新しい上限まで建て替わりうる棟
+      if (st.state === "freed" && t.cap != null && Number(t.p.h) > t.cap) {
+        subjects.push({ f: t.f, h: Number(t.p.h) });
+      }
+    }
+  });
+  const set1 = new Set(), set2 = new Set(), set3 = new Set(), all = new Set();
+  const topics = new Map();          // 棟(複合体)キー -> 論点のSet
+  const keyFeat = new Map();         // 同キー -> その棟のフィーチャ配列（点滅に使う）
+  const addT = (k, reason, feat) => {
+    if (!topics.has(k)) topics.set(k, new Set());
+    topicsFor(reason).forEach(t => topics.get(k).add(t));
+    if (feat) {
+      if (!keyFeat.has(k)) keyFeat.set(k, []);
+      const arr = keyFeat.get(k);
+      if (arr.indexOf(feat) < 0) arr.push(feat);
+    }
+  };
+  const shadows = [];
+  subjects.forEach(sj => {
+    const j = computeJourei(sj.f, sj.h);
+    j.shadows.forEach(sh => shadows.push(sh));
+    const key = f => f.properties.grp || f.properties.id;
+    j.kinA.forEach(f => { set1.add(key(f)); all.add(key(f)); addT(key(f), "kinA", f); });
+    j.kinB.forEach(f => { set2.add(key(f)); all.add(key(f)); addT(key(f), "kinB", f); });
+    j.shuu.forEach(f => { set3.add(key(f)); all.add(key(f)); addT(key(f), "shuu", f); });
+    const sk = sj.f.properties.grp || sj.f.properties.id;
+    all.add(sk); addT(sk, "subject", sj.f);
+  });
+  /* ★層は重ならないように整理してから数える。
+     1棟が、ある当事者にとっては近隣住民ア、別の当事者にとっては周辺住民、
+     ということが起きる。そのまま set1/set2/set3 の大きさを足すと二重に数える
+     （2026-08-23 発見。近隣125＋周辺214＝339 だが実際の合計は220棟だった）。
+     条例上の義務は強い方が残るので、ア ＞ イ ＞ 周辺 の順に吸収させる。 */
+  const subjKeys = new Set(subjects.map(sj => sj.f.properties.grp || sj.f.properties.id));
+  const kinA = new Set(), kinB = new Set(), shuu = new Set();
+  set1.forEach(k => { if (!subjKeys.has(k)) kinA.add(k); });
+  set2.forEach(k => { if (!subjKeys.has(k) && !kinA.has(k)) kinB.add(k); });
+  set3.forEach(k => { if (!subjKeys.has(k) && !kinA.has(k) && !kinB.has(k)) shuu.add(k); });
+  aggCache = { n: subjects.length, r1: kinA.size, r2: kinB.size, r3: shuu.size,
+               kinTotal: kinA.size + kinB.size,
+               all: all.size, shadows: shadows, topics: topics, keyFeat: keyFeat };
+}
+
+function renderAggregate() {
+  const el = document.getElementById("agg-stats");
+  if (!aggCache) {
+    el.innerHTML = '<div class="note">線を動かすと、変化した棟すべてについて条例の説明対象を合算します。</div>';
+    return;
+  }
+  const a = aggCache;
+  el.innerHTML =
+    kv('<span class="who wS"></span>当事者になる棟', a.n.toLocaleString() + " 棟") +
+    kv('<span class="who wA"></span><span style="color:#b8262c">近隣住民ア（15m かつ 50m）</span>', a.r1.toLocaleString() + " 棟") +
+    kv('<span class="who wB"></span><span style="color:#e08a2c">近隣住民イ（高さの2倍 かつ 冬至日の日影）</span>', a.r2.toLocaleString() + " 棟") +
+    kv('<b>近隣住民 計＝説明義務（第9条1項）</b>', "<b>" + a.kinTotal.toLocaleString() + " 棟</b>") +
+    kv('<span class="who wC"></span><span style="color:#2b6cb0">周辺住民（求められたら説明・第9条2項）</span>', a.r3.toLocaleString() + " 棟") +
+    kv("<b>説明対象の合計（当事者含む・重複除く）</b>", "<b>" + a.all.toLocaleString() + " 棟</b>") +
+    '<div class="note" style="margin-top:6px;">複合体（同一敷地に分割登録された棟）を1件に寄せて数えています。'
+    + '1棟が複数の当事者に対して違う層になることがあるため、強い義務（ア＞イ＞周辺）に寄せて重複を除いています。</div>';
+}
+
+
+/* =========================================================================
+   フェーズD：想定問答集 × 説明充足率
+   論点は恣意的に決めない。「その棟が、条例のどの号で説明対象になったか」から
+   機械的に割り当てる。だから棟ごとに持つ論点が違い、充足率が動く。
+     説明充足率 ＝ 未回答の論点を1つも持たない棟 ÷ 説明対象になった棟
+   ★これは賛成率でも同意率でもない。答えていない論点が残っているかどうかだけを数える。
+   ========================================================================= */
+
+const TOPICS = [
+  { id: "t1", text: "用途地域の変更とは何か（法律上どう変わるのか）",           from: "全員" },
+  { id: "t2", text: "土地・建物の資産価値は上がるのか／下がるのか",             from: "全員" },
+  { id: "t3", text: "建て替えたとき、同じ規模の建物を建てられるのか",           from: "当事者" },
+  { id: "t4", text: "いま行っている事業は続けられるのか（用途の制限）",         from: "当事者" },
+  { id: "t5", text: "住宅地として住みやすくなるのか",                           from: "後退のとき" },
+  { id: "t6", text: "商業地として商売が成り立つのか（治安は悪くならないか）",   from: "拡大のとき" },
+  { id: "t7", text: "日当たりはどれくらい変わるのか",                           from: "近隣イ（日影）" },
+  { id: "t8", text: "建て替えなくても、直後から変わることはあるのか",           from: "当事者" }
+];
+/* 初期値＝「標準的な用途地域変更の説明会資料が既に答えている論点」だけを回答済みにする。
+   実務の標準資料に載るのは、変更の理由・変更前後の用途地域と容積率建蔽率・区域図・スケジュール。
+   ＝制度の説明（t1）は載るが、残り7つは載らない。だから初期の説明充足率は低く出る。 */
+const answered = { t1: true, t2: false, t3: false, t4: false,
+                   t5: false, t6: false, t7: false, t8: false };
+
+/* 号ごとの論点。棟は「入った号」の和集合を持つ。
+   ★2026-08-24 に論点を全面的に入れ替えた（本人設計）。
+     旧＝条例の紛争類型（日照・工事中の騒音…）から起こした。
+     新＝住民から見た「自分に何が起きるか」から起こした。
+     用途地域の変更では工事が発生しないので、旧t4「工事中の騒音」は落とした。
+
+   ★根拠は一様ではない。混ぜて「全部条例です」と言わないこと。
+     条例 第2条第2項第12号（紛争の定義）に対応 … t7 日照
+     条例 第7号（近隣住民＝占有し若しくは所有する者）… 借家人も対象＝t2 の宛先に含まれる
+     条例の外・用途地域変更に固有 … t1（都計法・建基法の制度）／t3（建基法52・53条＋高度地区）
+                                     t4（建基法48条・別表第2）／t5・t6（環境の変化）
+                                     t8（変更の告示から直ちに効くもの）
+     未実装 … 第12号「テレビジョン放送の受信障害」。第8号エは周辺住民の独立要件なので、
+              周辺住民の棟数はその分だけ過小に出ている。
+   ★恣意的でないのは「どの棟がどの論点を持つか」の方（下の topicsFor）。
+
+   ★環境の論点は線を動かす向きで入れ替わる。
+     後退（住居側が広がる）＝t5「住宅地として住みやすくなるのか」
+     拡大（商業側が広がる）＝t6「商業地として商売が成り立つのか」
+     両方を同時に出さない。実際に起きるのはどちらか一方だから。 */
+function envTopic() { return offsetM < 0 ? "t5" : "t6"; }
+
+function topicsFor(reason) {
+  const env = envTopic();
+  // 当事者＝用途地域そのものが変わる棟。t3/t4/t8 はこの層にしか生じない
+  if (reason === "subject") return ["t1", "t2", "t3", "t4", env, "t8"];
+  if (reason === "kinB")    return ["t1", "t2", env, "t7"];   // 日影で入った棟だけが t7 を持つ
+  return ["t1", "t2", env];                                    // kinA・shuu
+}
+
+function satisfaction() {
+  if (!aggCache || !aggCache.topics) return null;
+  let total = 0, ok = 0;
+  aggCache.topics.forEach(set => {
+    total++;
+    let allAns = true;
+    set.forEach(t => { if (!answered[t]) allAns = false; });
+    if (allAns) ok++;
+  });
+  return { ok: ok, total: total };
+}
+
+function renderFaq() {
+  const list = document.getElementById("faq-list");
+  list.innerHTML = "";
+  TOPICS.forEach(t => {
+    const row = document.createElement("div");
+    row.className = "faq-row " + (answered[t.id] ? "answered" : "unanswered");
+    row.innerHTML = '<span class="box">' + (answered[t.id] ? "✓" : "") + "</span>" +
+      '<span><span class="txt-id">' + t.from + "</span>" + t.text + "</span>";
+    row.addEventListener("click", () => {
+      answered[t.id] = !answered[t.id];
+      renderFaq(); renderGauge(); refreshUnsatisfied();
+    });
+    list.appendChild(row);
+  });
+}
+
+function renderGauge() {
+  const sat = satisfaction();
+  const pct = document.getElementById("gauge-pct");
+  const fill = document.getElementById("gauge-fill");
+  const dot = document.getElementById("gauge-dot");
+  const th = document.getElementById("threshold-list");
+  if (!sat || sat.total === 0) {
+    pct.textContent = "--"; fill.style.width = "0%"; dot.style.left = "0%";
+    th.innerHTML = '<div class="th-row"><span class="lbl">線を動かすと計算します</span></div>';
+    return;
+  }
+  const r = sat.ok / sat.total, p = r * 100;
+  pct.textContent = (Math.round(p * 10) / 10).toFixed(1);
+  fill.style.width = p + "%"; dot.style.left = p + "%";
+  th.innerHTML = [{ l: "2/3", r: 2 / 3 }, { l: "3/4", r: 3 / 4 }, { l: "4/5", r: 4 / 5 }].map(x => {
+    const need = Math.ceil(x.r * sat.total - 1e-9), rem = Math.max(0, need - sat.ok);
+    return '<div class="th-row"><span class="lbl">' + x.l + 'まで</span><span class="val' +
+      (rem === 0 ? " done" : "") + '">' + (rem === 0 ? "達成" : "あと" + rem + "棟") + "</span></div>";
+  }).join("") +
+  '<div class="th-row"><span class="val">' + sat.ok.toLocaleString() + " / " + sat.total.toLocaleString() +
+  ' 棟</span></div>';
+}
+
+
+/* =========================================================================
+   未充足の棟を点滅させる
+   説明充足率の数字と、地図上のどの棟の話なのかを結びつけるため。
+   論点にチェックを入れると、その棟が点滅をやめる＝ゲージが上がる理由が目で見える。
+   ========================================================================= */
+let blinkOn = true, blinkTimer = null, blinkPhase = 0;
+
+function unsatisfiedGeoJSON() {
+  const fs = [];
+  if (!aggCache || !aggCache.topics) return { type: "FeatureCollection", features: fs };
+  aggCache.topics.forEach((set, k) => {
+    let unanswered = false;
+    set.forEach(t => { if (!answered[t]) unanswered = true; });
+    if (!unanswered) return;
+    const arr = aggCache.keyFeat.get(k) || [];
+    arr.forEach(f => fs.push({ type: "Feature", geometry: f.geometry, properties: { _h: Number(f.properties.h) } }));
+  });
+  return { type: "FeatureCollection", features: fs };
+}
+
+function refreshUnsatisfied() {
+  const src = map.getSource("unsat");
+  if (src) src.setData(unsatisfiedGeoJSON());
+  updateBlinkRunning();
+}
+
+function updateBlinkRunning() {
+  const has = aggCache && map.getSource("unsat") &&
+              unsatisfiedGeoJSON().features.length > 0;
+  if (blinkOn && has) { if (!blinkTimer) blinkTimer = setInterval(blinkStep, 380); }
+  else { if (blinkTimer) { clearInterval(blinkTimer); blinkTimer = null; } setBlinkOpacity(0); }
+}
+
+function setBlinkOpacity(v) {
+  if (!map.getLayer("unsat-3d")) return;
+  map.setPaintProperty("unsat-3d", "fill-extrusion-opacity", v);
+  if (map.getLayer("unsat-line")) map.setPaintProperty("unsat-line", "line-opacity", v > 0 ? 0.9 : 0);
+}
+
+function blinkStep() {
+  blinkPhase = 1 - blinkPhase;
+  setBlinkOpacity(blinkPhase ? 0.85 : 0.12);
+}
+
+function addBlinkLayers() {
+  map.addSource("unsat", { type: "geojson", data: unsatisfiedGeoJSON() });
+  map.addLayer({
+    id: "unsat-3d", type: "fill-extrusion", source: "unsat",
+    paint: {
+      "fill-extrusion-color": "#f2c200",
+      "fill-extrusion-height": ["+", ["get", "_h"], 0.8],
+      "fill-extrusion-base": 0,
+      "fill-extrusion-opacity": 0
+    }
+  });
+  map.addLayer({
+    id: "unsat-line", type: "line", source: "unsat",
+    paint: { "line-color": "#a37800", "line-width": 1.6, "line-opacity": 0 }
+  });
+}
+
+/* ---------------- 集計パネル ---------------- */
+/* =========================================================================
+   さいたま市 新庁舎（基本設計・令和8年4月／令和8年8月10日修正）
+   ★これは予測でも仮定でもない。市が公表した基本設計説明書の諸元をそのまま置いている。
+     敷地 約15,000㎡／建築面積 約10,000㎡／建蔽率 約67%／延床 約64,000㎡
+     （うち容積対象 約50,000㎡）／容積率 約330%／地下1階 地上19階（法上20階）
+     ／最高高さ 約94m／免震構造（上部＝鉄骨造・下部＝RC造）
+     法的規制＝商業地域・防火地域・指定建蔽率80%・指定容積率400%・高さ制限なし・
+     日影規制なし（ただし設計書自身が「敷地外に他の用途地域あり（第二種住居地域）」と明記）
+   ⚠️ 外周の形だけは実際の設計図ではない。→ data/shinchosha.geojson の note を参照
+   ========================================================================= */
+function addShinchoLayers() {
+  const empty = { type: "FeatureCollection", features: [] };
+  map.addSource("shincho", { type: "geojson", data: empty });
+  map.addLayer({
+    id: "shincho-3d", type: "fill-extrusion", source: "shincho",
+    paint: {
+      // ★黒。用途地域の配色は赤・桃・橙・黄・緑・紫・青で、橙は田園住居や
+      //   「近隣住民イ」の線と紛らわしかったため（2026-08-23 本人指摘）。
+      //   黒はどの用途地域にも割り当てていないので、混同しない。
+      "fill-extrusion-color": "#1a1d21",
+      "fill-extrusion-height": ["get", "h"],
+      "fill-extrusion-base": 0,
+      "fill-extrusion-opacity": 0.92
+    }
+  });
+  map.addLayer({
+    id: "shincho-line", type: "line", source: "shincho",
+    paint: { "line-color": "#5b6470", "line-width": 2 }
+  });
+  // 既定で建った状態から始める（カメラは動かさない）
+  applyShincho(false);
+}
+
+function shinchoFeature() { return shincho && shincho.features[0]; }
+
+/* fly=true のときだけカメラを寄せる（起動時は動かさない） */
+function applyShincho(fly) {
+  const f = shinchoFeature();
+  map.getSource("shincho").setData(
+    shinchoOn && f ? { type: "FeatureCollection", features: [f] } : { type: "FeatureCollection", features: [] });
+  const btn = document.getElementById("shincho-btn");
+  if (btn) {
+    btn.classList.toggle("active", shinchoOn);
+    btn.textContent = shinchoOn
+      ? "↩ 現況に戻す（新庁舎を消す）"
+      : "🏛 新庁舎（94m・基本設計）を建てる";
+  }
+  if (shinchoOn && f) {
+    subject = f;                    // 条例の計算対象にする
+    refreshJourei();
+    if (fly) map.easeTo({ center: featCentroid(f.geometry), zoom: 15.4, pitch: 60, duration: 900 });
+  } else {
+    // 新庁舎を消したとき、対象がその棟のままだと影が残るので外す
+    if (subject === f) subject = null;
+    refreshJourei();
+  }
+  renderShinchoStats();
+}
+
+function toggleShincho(on) { shinchoOn = on; applyShincho(true); }
+
+/* 諸元はパネルに出さない（右パネルが長くなりすぎるため・2026-08-23 本人指示）。
+   チップ #shincho-chip → モーダル #shincho-modal で見せる。 */
+function renderShinchoStats() {
+  const chip = document.getElementById("shincho-chip");
+  if (chip) {
+    chip.textContent = shinchoOn
+      ? "🏛 新庁舎の建築計画（クリックで説明）"
+      : "🏛 新庁舎の建築計画とは（いまは現況・クリックで説明）";
+  }
+}
+
+function refreshPanel() {
+  const feats = buildings.features;
+  const n = feats.length;
+  const nLod2 = feats.filter(f => f.properties.lod2 === true).length;
+  document.getElementById("stat-count").textContent = n.toLocaleString();
+
+  renderLegend(feats);
+  renderUsedStats(feats);
+
+  const nZoneNull = feats.filter(f => f.properties.zone_now == null).length;
+  /* ★下帯は1行だけ。内訳はすべて #src-modal へ（2026-08-23 本人指示）。
+     高さの補完順だけは #src-modal から下帯へ移した（2026-08-23 本人指示） */
+  /* ★対象範囲と棟数は、同じ下帯の #head-stat が持っている（2026-08-24 に上帯から移動）。
+     ここで繰り返すと同じ帯に同じ文字が2回出るので落とした。 */
+  document.getElementById("footer").textContent =
+    "PLATEAU さいたま市 2025年度（CityGML）"
+    + " ／ 高さ＝measuredHeight → gen「建物高さ」→ 階数×3m の順で補完";
+  document.getElementById("src-n").textContent    = n.toLocaleString();
+  document.getElementById("src-lod2").textContent = nLod2.toLocaleString();
+  document.getElementById("src-lodp").textContent = (nLod2 / n * 100).toFixed(1);
+  document.getElementById("src-null").textContent = nZoneNull.toLocaleString();
+}
+
+function renderLegend(feats) {
+  const legend = document.getElementById("legend");
+  const title = document.getElementById("legend-title");
+  legend.innerHTML = "";
+
+  if (colorMode === "zone") {
+    title.textContent = "用途地域";
+    const counts = {};
+    feats.forEach(f => { const z = f.properties.zone_now; counts[z] = (counts[z] || 0) + 1; });
+    Object.keys(counts)
+      .sort((a, b) => counts[b] - counts[a])
+      .forEach(k => {
+        const isNull = (k === "null" || k === "undefined");
+        legend.appendChild(legendRow(
+          isNull ? COLOR_UNKNOWN : (ZONE_COLORS[k] || COLOR_UNKNOWN),
+          isNull ? "用途地域なし" : (ZONE_NAMES[k] || k),
+          counts[k]
+        ));
+      });
+  } else if (colorMode === "plain") {
+    title.textContent = "建物";
+    legend.appendChild(legendRow(COLOR_PLAIN, "建物", feats.length));
+  } else {
+    title.textContent = "容積消化率";
+    const counts = USED_BINS.map(() => 0);
+    let none = 0;
+    feats.forEach(f => {
+      const u = f.properties.used_ratio;
+      if (u == null) { none++; return; }
+      for (let i = 0; i < USED_BINS.length; i++) {
+        if (u < USED_BINS[i].max) { counts[i]++; break; }
+      }
+    });
+    USED_BINS.forEach((b, i) => legend.appendChild(legendRow(b.color, b.label, counts[i])));
+    legend.appendChild(legendRow(COLOR_NO_USED, "算出不能（属性欠落）", none));
+  }
+}
+
+function legendRow(color, label, count) {
+  const row = document.createElement("div");
+  row.className = "legend-row";
+  row.innerHTML = '<span class="sw" style="background:' + color + '"></span><span>' + label +
+    '</span><span class="n">' + count.toLocaleString() + "</span>";
+  return row;
+}
+
+function renderUsedStats(feats) {
+  const vals = feats.map(f => f.properties.used_ratio).filter(v => v != null).sort((a, b) => a - b);
+  const el = document.getElementById("used-stats");
+  if (!vals.length) { el.innerHTML = '<div class="kv"><span class="k">算出可能な棟がありません</span></div>'; return; }
+  const q = p => vals[Math.min(vals.length - 1, Math.floor(vals.length * p))];
+  const over = vals.filter(v => v >= 1.0).length;
+  const slack = vals.filter(v => v < 0.5).length;
+  el.innerHTML =
+    kv("算出できた棟", vals.length.toLocaleString() + " 棟（" + (vals.length / feats.length * 100).toFixed(1) + "%）") +
+    kv("中央値", q(0.5).toFixed(2)) +
+    kv("第1四分位 / 第3四分位", q(0.25).toFixed(2) + " / " + q(0.75).toFixed(2)) +
+    kv("容積消化率 1.00 以上", over.toLocaleString() + " 棟（" + (over / vals.length * 100).toFixed(1) + "%）") +
+    kv("容積消化率 0.50 未満", slack.toLocaleString() + " 棟（" + (slack / vals.length * 100).toFixed(1) + "%）");
+}
+function kv(k, v) { return '<div class="kv"><span class="k">' + k + '</span><span class="v">' + v + "</span></div>"; }
+
+/* ---------------- 操作 ---------------- */
+/* 色分けはトグル。押しているものをもう一度押すと OFF＝色分けなし（"plain"）。
+   LOD2/LOD1 の色分けは廃止（この案では屋根形状の有無が判定に効かないため・2026-08-23 本人指示）。 */
+document.querySelectorAll("#color-mode button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const m = btn.dataset.mode;
+    // 手で押したら、レバーによる自動復帰の記憶は捨てる（以後は本人の選択が優先）
+    colorModeBeforeLine = null;
+    setColorMode((colorMode === m) ? "plain" : m);  // もう一度押すとOFF＝色分けなし
+  });
+});
+
+document.querySelectorAll("#layer-toggle button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    btn.classList.toggle("active");
+    const on = btn.classList.contains("active");
+    if (btn.dataset.layer === "chome") {
+      showChome = on;
+      updateChomeLabels();
+    } else if (btn.dataset.layer === "roads") {
+      if (on) {
+        ensureRoads(btn).then(ok => {
+          if (ok) ["roads-fill", "roads-line"].forEach(id =>
+            map.setLayoutProperty(id, "visibility", "visible"));
+        });
+      } else {
+        ["roads-fill", "roads-line"].forEach(id => {
+          if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
+        });
+      }
+    } else if (btn.dataset.layer === "blink") {
+      blinkOn = on;
+      updateBlinkRunning();
+    } else if (btn.dataset.layer === "ceiling") {
+      if (map.getLayer("ceiling-3d")) map.setLayoutProperty("ceiling-3d", "visibility", on ? "visible" : "none");
+    } else if (btn.dataset.layer === "koudo") {
+      showKoudo = on;
+      ["koudo-plane-15", "koudo-plane-20", "koudo-edge-3d"].forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
+      });
+      updateKoudoLabels();
+    } else if (btn.dataset.layer === "zones") {
+      /* ★2026-08-24：一度「面」と「線」に分けたが本人指示で元に戻した。
+         欲しかったのは1,306区画の境界ではなく「さいたま市全域の外周1本」だった（city-outline）。
+         外周はボタンを持たせず、常時表示にしてある。 */
+      showZones = on;
+      ["zones-fill", "zones-line"].forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
+      });
+    } else {
+      showBase = on;
+      if (map.getLayer("gsi")) map.setLayoutProperty("gsi", "visibility", on ? "visible" : "none");
+    }
+  });
+});
+
+/* 条例の説明モーダル。審査員はこの条例を事前に知らない前提で置く。 */
+(function () {
+  const gm = document.getElementById("gauge-modal");
+  document.getElementById("gauge-chip").addEventListener("click", () => gm.classList.add("open"));
+  document.getElementById("gauge-close").addEventListener("click", () => gm.classList.remove("open"));
+  gm.addEventListener("click", e => { if (e.target === gm) gm.classList.remove("open"); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") gm.classList.remove("open"); });
+
+  const um = document.getElementById("used-modal");
+  document.getElementById("used-chip").addEventListener("click", () => um.classList.add("open"));
+  document.getElementById("used-close").addEventListener("click", () => um.classList.remove("open"));
+  um.addEventListener("click", e => { if (e.target === um) um.classList.remove("open"); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") um.classList.remove("open"); });
+
+  const sm = document.getElementById("shincho-modal");
+  document.getElementById("shincho-chip").addEventListener("click", () => sm.classList.add("open"));
+  document.getElementById("shincho-close").addEventListener("click", () => sm.classList.remove("open"));
+  sm.addEventListener("click", e => { if (e.target === sm) sm.classList.remove("open"); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") sm.classList.remove("open"); });
+
+  const am = document.getElementById("area-modal");
+  document.getElementById("head-stat").addEventListener("click", () => am.classList.add("open"));
+  document.getElementById("area-close").addEventListener("click", () => am.classList.remove("open"));
+  am.addEventListener("click", e => { if (e.target === am) am.classList.remove("open"); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") am.classList.remove("open"); });
+
+  const rm = document.getElementById("src-modal");
+  document.getElementById("src-chip").addEventListener("click", () => rm.classList.add("open"));
+  document.getElementById("src-close").addEventListener("click", () => rm.classList.remove("open"));
+  rm.addEventListener("click", e => { if (e.target === rm) rm.classList.remove("open"); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") rm.classList.remove("open"); });
+
+  /* 判定の前提。チップは線を動かしたあとに作られるので、document 委譲で拾う */
+  const mm = document.getElementById("method-modal");
+  document.addEventListener("click", e => {
+    if (e.target && e.target.id === "method-chip") {
+      document.getElementById("method-body").innerHTML = methodBodyHTML;
+      mm.classList.add("open");
+    }
+  });
+  document.getElementById("method-close").addEventListener("click", () => mm.classList.remove("open"));
+  mm.addEventListener("click", e => { if (e.target === mm) mm.classList.remove("open"); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") mm.classList.remove("open"); });
+
+  const km = document.getElementById("koudo-modal");
+  document.getElementById("koudo-chip").addEventListener("click", () => km.classList.add("open"));
+  document.getElementById("koudo-close").addEventListener("click", () => km.classList.remove("open"));
+  km.addEventListener("click", e => { if (e.target === km) km.classList.remove("open"); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") km.classList.remove("open"); });
+
+  const m = document.getElementById("jourei-modal");
+  document.getElementById("jourei-chip").addEventListener("click", () => m.classList.add("open"));
+  document.getElementById("jourei-close").addEventListener("click", () => m.classList.remove("open"));
+  m.addEventListener("click", e => { if (e.target === m) m.classList.remove("open"); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") m.classList.remove("open"); });
+})();
+
+/* =========================================================================
+   ★スマホ・タブレットで開かれたときの案内（2026-08-24 本人指示）
+   判定＝「幅が足りない」か「指で触っている（pointer:coarse）うえに幅も足りない」。
+   ノートPCの1366pxで誤爆しないように、幅の下限を分けてある。
+   ★一度「このまま開く」を押したら、以後は出さない（大型タッチ端末を締め出さない）。
+   ========================================================================= */
+(function () {
+  const gate = document.getElementById("pc-gate");
+  let dismissed = false;
+  const coarse = () => window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  const tooSmall = () => window.innerWidth < 1000 || (coarse() && window.innerWidth < 1280);
+  function check() {
+    if (dismissed) { gate.classList.remove("on"); return; }
+    gate.classList.toggle("on", tooSmall());
+  }
+  document.getElementById("pc-gate-url").textContent = location.href;
+  document.getElementById("pc-gate-copy").addEventListener("click", () => {
+    const btn = document.getElementById("pc-gate-copy");
+    const done = () => { btn.textContent = "コピーしました"; setTimeout(() => btn.textContent = "URLをコピー", 1800); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(location.href).then(done, () => btn.textContent = "コピーできません");
+    } else {
+      // クリップボードAPIが無い環境（古い端末・非HTTPS）では選択できるようにするだけ
+      const r = document.createRange(); r.selectNode(document.getElementById("pc-gate-url"));
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      btn.textContent = "選択しました（長押しでコピー）";
+    }
+  });
+  document.getElementById("pc-gate-ignore").addEventListener("click", () => {
+    dismissed = true; gate.classList.remove("on");
+  });
+  check();
+  window.addEventListener("resize", check);
+  window.addEventListener("orientationchange", check);
+})();
+
+/* =========================================================================
+   ★納得率シミュレータ（consent.html）を重ねて開く（2026-08-24 本人指示）
+   ・iframe で読む。2つのプロトタイプは別ファイルのまま（dev/PROTOTYPES.md の切り分けを維持）
+   ・開くときに「いまの用途地域境の位置（offsetM）」と「論点のチェック（answered）」を渡す
+   ・向こうで論点を触ったら IndexEmbed.setAnswered() で戻ってくる＝双方向に連動する
+   ・★閉じるのは display だけ。index も iframe も破棄しないので、
+     行き来しても両方が直前の状態のまま残る
+   ========================================================================= */
+const CO = {
+  el: null, frame: null, loaded: false,
+  open() {
+    this.el = this.el || document.getElementById("consent-overlay");
+    this.frame = this.frame || document.getElementById("co-frame");
+    this.el.classList.add("open");
+    if (!this.loaded) {
+      this.loaded = true;
+      this.frame.addEventListener("load", () => this.push());
+      this.frame.src = "consent.html?embed=1";
+    } else {
+      this.push();
+    }
+    this.ctx();
+  },
+  close() { if (this.el) this.el.classList.remove("open"); },
+  /* いまの状態を向こうへ渡す */
+  push() {
+    try {
+      const w = this.frame && this.frame.contentWindow;
+      if (w && w.ConsentEmbed) w.ConsentEmbed.setContext({
+        offsetM: offsetM,
+        answered: Object.assign({}, answered)
+      });
+    } catch (e) { console.warn("納得率シミュレータへ状態を渡せませんでした", e); }
+  },
+  /* 上の黒帯に、いま何を渡しているかを出す */
+  ctx() {
+    const s = satisfaction();
+    const dir = offsetM < 0 ? "商業を" + Math.round(-offsetM) + "m後退"
+              : offsetM > 0 ? "商業を" + Math.round(offsetM) + "m拡大" : "現行（動かしていない）";
+    const sat = s && s.total ? "説明対象 " + s.total + "棟 ／ 説明充足率 "
+                             + (s.ok / s.total * 100).toFixed(1) + "%（実測）" : "説明対象 0棟";
+    document.getElementById("co-ctx").textContent = "地図から渡した状態：" + dir + " ／ " + sat;
+  }
+};
+
+/* 向こうから論点のチェックが返ってくる */
+window.IndexEmbed = {
+  setAnswered(ans) {
+    let changed = false;
+    Object.keys(answered).forEach(k => {
+      if (ans[k] != null && !!ans[k] !== !!answered[k]) { answered[k] = !!ans[k]; changed = true; }
+    });
+    if (!changed) return;
+    renderFaq(); renderGauge(); refreshUnsatisfied();
+    CO.ctx();
+  }
+};
+
+(function () {
+  document.getElementById("consent-open").addEventListener("click", e => {
+    e.stopPropagation();     // 凡例の他のハンドラに拾わせない
+    CO.open();
+  });
+  document.getElementById("co-close").addEventListener("click", () => CO.close());
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && document.getElementById("consent-overlay").classList.contains("open")) CO.close();
+  });
+})();
+
+/* 凡例の開閉 */
+(function () {
+  const lg = document.getElementById("map-legend");
+  const close = document.getElementById("legend-close");
+  const tog = document.getElementById("legend-toggle");
+  close.addEventListener("click", () => { lg.classList.add("hidden"); tog.style.display = "block"; });
+  tog.addEventListener("click", () => { lg.classList.remove("hidden"); tog.style.display = "none"; });
+})();
+
+/* ---------------- 狭い画面：集計パネルの開閉 ---------------- */
+(function () {
+  const handle = document.getElementById("side-handle");
+  const side = document.getElementById("side");
+  const label = document.getElementById("side-handle-label");
+  const caret = handle.querySelector(".caret");
+  // スマホは地図を広く見せたいので初期状態は閉じる
+  if (window.matchMedia("(max-width: 760px)").matches) side.classList.add("collapsed");
+  function sync() {
+    const closed = side.classList.contains("collapsed");
+    label.textContent = closed ? "集計を表示" : "集計を隠す";
+    caret.textContent = closed ? "▲" : "▼";
+  }
+  handle.addEventListener("click", () => { side.classList.toggle("collapsed"); sync(); });
+  sync();
+})();
+
+boot();
+</script>
+
+</body>
+</html>

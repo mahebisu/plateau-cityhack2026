@@ -1,0 +1,22 @@
+# ★このリポジトリは「公開するものだけ」を置く場所です。
+#    中身は ../dev/make_site.sh がホワイトリストで作ります。
+#    ここに書いてあるのは「万一まぎれ込んだら止める」ための保険です。
+
+# 元データ（絶対に上げない）
+*.zip
+extract/
+skc_*/
+data/*.bak
+data/_backup_*
+data/pref_*.geojson
+
+# 作業ファイル
+_debug*.html
+_snapshot_*/
+*.py
+*.sh
+verify_numbers.js
+dump_cohort.js
+check_optimality.js
+node_modules/
+.DS_Store

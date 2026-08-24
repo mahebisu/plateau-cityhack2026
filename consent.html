@@ -1,0 +1,782 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>合意率の目標から、説明設計を解く</title>
+<style>
+  :root { --ink:#1a2129; --sub:#5d6b78; --line:#d8e0e8; --bg:#f4f7fa; --accent:#2b6cb0;
+          --red:#b8262c; --orange:#e08a2c; --blue:#2b6cb0; --green:#2e7d4f; --gold:#b8860b; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.7 "Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+         color:var(--ink); background:var(--bg); }
+  header { background:#fff; border-bottom:1px solid var(--line); padding:10px 18px; }
+  header h1 { margin:0; font-size:16px; }
+  header .sub { color:var(--sub); font-size:12px; }
+  .page { padding:14px 18px 40px; max-width:1500px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin-bottom:12px; }
+  .card h2 { margin:0 0 8px; font-size:13px; letter-spacing:.04em; color:var(--accent);
+             border-bottom:1px solid var(--line); padding-bottom:5px; }
+  .note { font-size:11.5px; color:var(--sub); line-height:1.6; }
+  /* ★単位は % に統一（2026-08-24 本人指示）。差は符号で示す＝ +% / -% / ±%。
+     「pt（パーセントポイント）」表記は使わない。 */
+
+  /* ★スマホ・タブレット向けの案内（2026-08-24 本人指示）。★埋め込み表示のときは出さない。 */
+  #pc-gate {
+    position:fixed; inset:0; z-index:100; display:none; background:#1a2129; color:#fff;
+    padding:24px; align-items:center; justify-content:center;
+  }
+  #pc-gate.on { display:flex; }
+  #pc-gate .box { max-width:440px; line-height:1.9; font-size:14px; }
+  #pc-gate h2 { margin:0 0 10px; font-size:18px; }
+  #pc-gate .why { color:#c3ced8; font-size:12.5px; }
+  #pc-gate button {
+    font-family:inherit; font-size:13px; padding:8px 14px; border-radius:6px; cursor:pointer;
+    border:1px solid #46525e; background:#2b333c; color:#fff; margin-top:12px;
+  }
+
+  /* ---- 理論のよりどころ：チップとポップアップ（2026-08-24 本人指示） ---- */
+  .refchip {
+    display:inline-block; cursor:pointer; font-size:11.5px; line-height:1.45;
+    border:1px solid var(--line); background:#fff; border-radius:6px;
+    padding:5px 9px; margin:0 5px 5px 0; text-align:left;
+  }
+  .refchip:hover { background:#eef4fa; border-color:var(--accent); }
+  .refchip b { display:block; font-size:12px; color:var(--ink); }
+  .refchip span { color:var(--sub); }
+
+  /* ---- 画面下に固定する帯 ---- */
+  #refbar {
+    position:fixed; left:0; right:0; bottom:0; z-index:50;
+    display:flex; align-items:center; gap:12px;
+    padding:7px 14px; background:#fbfcfd; border-top:1px solid var(--line);
+    box-shadow:0 -2px 10px rgba(20,30,40,.07);
+  }
+  #refbar .rb-lbl {
+    flex:0 0 auto; font-size:11px; font-weight:700; color:var(--sub);
+    line-height:1.3; letter-spacing:.02em; border-right:1px solid var(--line); padding-right:12px;
+  }
+  #refbar #refs { flex:1 1 auto; display:flex; flex-wrap:wrap; gap:5px; min-width:0; }
+  #refbar .refchip { margin:0; padding:4px 8px; }
+  #refbar .rb-note { flex:0 0 auto; font-size:10.5px; color:var(--sub); line-height:1.45; }
+  /* 帯に隠れないよう本文の下を空ける */
+  .page { padding-bottom:96px; }
+  #ref-modal {
+    position:fixed; inset:0; z-index:60; display:none; padding:24px;
+    background:rgba(20,24,28,.45); align-items:center; justify-content:center;
+  }
+  #ref-modal.open { display:flex; }
+  #ref-box {
+    background:#fff; border-radius:8px; max-width:760px; width:100%; max-height:86vh;
+    overflow-y:auto; padding:20px 24px; font-size:13px; line-height:1.8;
+    box-shadow:0 8px 32px rgba(0,0,0,.28);
+  }
+  #ref-box h3 { margin:0 0 2px; font-size:15.5px; }
+  #ref-box .cite { color:var(--sub); font-size:11.5px; margin-bottom:12px; }
+  #ref-box h4 {
+    margin:15px 0 5px; font-size:12.5px; border-left:3px solid var(--accent); padding-left:7px;
+  }
+  #ref-box h4.use { border-left-color:var(--green); }
+  #ref-box h4.warn { border-left-color:var(--red); }
+  #ref-box ul { margin:4px 0 0 18px; padding:0; }
+  #ref-box li { margin:2px 0; }
+  #ref-box code { background:#f2f5f8; padding:0 3px; border-radius:3px; font-size:11.5px; }
+  #ref-box table { border-collapse:collapse; width:100%; font-size:12px; margin:6px 0; }
+  #ref-box th, #ref-box td { border:1px solid var(--line); padding:4px 7px; text-align:left; vertical-align:top; }
+  #ref-box th { background:#f5f7f9; }
+  #ref-close { float:right; cursor:pointer; color:var(--sub); font-size:19px; line-height:1; }
+  .hits { font-size:11.5px; color:var(--sub); margin-top:4px; }
+  .cols { display:grid; grid-template-columns:1fr 380px; gap:14px; align-items:start; }
+  label.row { display:flex; align-items:center; gap:7px; padding:2px 0; cursor:pointer; font-size:13px; }
+  label.row input { margin:0; }
+  select, input[type=number] { font:inherit; font-size:13px; padding:2px 5px; border:1px solid var(--line);
+            border-radius:4px; background:#fff; }
+  .fld { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:3px 0; font-size:13px; }
+  /* 目標ボタン */
+  .goals { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .goal { border:1.5px solid var(--line); background:#fff; border-radius:7px; padding:6px 16px;
+          cursor:pointer; font:inherit; font-size:15px; font-weight:700; color:var(--sub); }
+  .goal.on { border-color:var(--accent); background:#eaf2fa; color:var(--accent); }
+  .goal small { display:block; font-size:10.5px; font-weight:500; }
+  /* レシピ表 */
+  table { border-collapse:collapse; width:100%; font-size:12.5px; }
+  th,td { border-bottom:1px solid var(--line); padding:5px 7px; text-align:right; vertical-align:top; }
+  th:nth-child(2), td:nth-child(2) { text-align:left; }
+  thead th { color:var(--sub); font-weight:600; font-size:11.5px; }
+  tr.beyond td { opacity:.5; }
+  tr.hit td { background:#f3f9f4; }
+  td .why { display:block; font-size:11px; color:var(--sub); line-height:1.5; }
+  .badge { display:inline-block; background:var(--green); color:#fff; font-size:10.5px; font-weight:700;
+           border-radius:4px; padding:1px 7px; margin-left:6px; white-space:nowrap; }
+  .badge.next { background:var(--gold); }
+  .free { display:inline-block; background:#fff2cc; color:#8a6d00; border:1px solid #e6d28a;
+          font-size:10.5px; font-weight:700; border-radius:4px; padding:0 5px; margin-left:5px; }
+  /* ゲージ */
+  .gauges { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .g { text-align:center; }
+  .g .lb { font-size:12px; color:var(--sub); }
+  .g .num { font-size:32px; font-weight:800; line-height:1.1; }
+  .g .num small { font-size:14px; font-weight:600; }
+  .g .delta { font-size:11px; font-weight:700; }
+  .bar { position:relative; height:12px; background:#eaeff4; border-radius:6px; margin-top:6px; overflow:hidden; }
+  .bar i { position:absolute; left:0; top:0; bottom:0; border-radius:6px; }
+  .band { position:absolute; top:0; bottom:0; background:rgba(43,108,176,.22); }
+  .goalline { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--green); }
+  .warn { background:#fff6f6; border:1px solid #f0c8c8; border-radius:8px; padding:10px 14px; font-size:12px; }
+  .warn b { color:var(--red); }
+  code { background:#eef3f8; padding:1px 4px; border-radius:3px; font-size:12px; }
+  .kv { display:flex; justify-content:space-between; font-size:12.5px; padding:1px 0; }
+  .kv span:last-child { font-variant-numeric:tabular-nums; font-weight:600; }
+  .meas { color:var(--green); } .est { color:var(--accent); }
+  button.act { font:inherit; font-size:12px; border:1px solid var(--line); background:#fff;
+               border-radius:5px; padding:3px 10px; cursor:pointer; }
+  button.act:hover { background:#eef3f8; }
+  .dirty { color:var(--orange); font-weight:700; }
+</style>
+
+<header>
+  <h1>合意率の目標から、説明設計を解く
+    <span style="font-weight:400;color:var(--sub)">— 用途地域の変更にあたっての住民説明</span></h1>
+  <div class="sub">大宮駅×さいたま新都心駅 徒歩15分圏／
+    <b>理論のよりどころ6つは画面下の帯</b>（クリックで内容・使い方・原本リンク）</div>
+</header>
+
+<div class="page">
+
+  <!-- ============ ① 目標から解く（既定の表示） ============ -->
+  <div class="card">
+    <h2>① 目標の合意率に、最も安く届く説明設計</h2>
+    <div class="goals">
+      <span style="font-size:13px;color:var(--sub)">目標</span>
+      <button class="goal on" data-t="0.6667">2/3<small>66.7%</small></button>
+      <button class="goal" data-t="0.75">3/4<small>75%</small></button>
+      <button class="goal" data-t="0.8">4/5<small>80%</small></button>
+      <span style="flex:1"></span>
+      <span style="font-size:13px;color:var(--sub)">用途地域の境を動かす量</span>
+      <select id="off"></select>
+      <span id="embed-note" style="display:none"></span>
+    </div>
+
+    <div class="note" style="margin:8px 0 2px"><b>数字の読み方</b>：単位は<b>すべて %</b> です。<b>符号の無い %</b> はその時点の率（水準）、<b>+% / -%</b> は率と率の<b>差</b>、<b>±%</b> は<b>広がり</b>を表します。<span style="color:var(--sub)">例：合意率 33.8% → 66.7% は「+32.9%」と書いています（33.8の何割増しか、という意味ではありません）。なお「係数を±50%振る」の50%だけは、係数そのものを何割動かすかという意味です。</span></div>
+    <div class="note" style="margin:6px 0 6px;padding:7px 10px;background:#f7fafc;border-radius:6px" id="startline">—</div>
+
+    <table>
+      <thead><tr><th style="width:26px">#</th><th>打つ手</th><th style="width:52px">コスト</th>
+        <th style="width:46px">累計</th><th style="width:66px">合意率</th><th style="width:62px">納得率</th>
+        <th style="width:66px">対面対応</th></tr></thead>
+      <tbody id="recipe"></tbody>
+    </table>
+    <div class="note" style="margin-top:8px" id="marks"></div>
+    <div class="note" style="margin-top:6px">
+      <b>コストは市の手間の代理（人日・費用）で、すべて仮の値です。</b>ここを変えれば順序は変わります。
+      探索はビーム探索＋分枝限定。<b>総当たり524,288通りと突き合わせて、3つの目標すべてで最小コストと一致</b>しています
+      （<code>node check_optimality.js</code>）。
+    </div>
+  </div>
+
+  <div class="cols">
+    <div>
+      <!-- ============ ② 出力 ============ -->
+      <div class="card">
+        <h2>② この設計だと、どうなるか</h2>
+        <div class="gauges">
+          <div class="g"><div class="lb"><b class="meas">実測</b>・説明充足率</div>
+            <div class="num meas" id="n-sat">—<small>%</small></div>
+            <div class="bar"><i id="b-sat" style="background:var(--green)"></i></div>
+            <div class="note" id="s-sat">—</div></div>
+          <div class="g"><div class="lb"><b class="est">推定</b>・納得率</div>
+            <div class="num est" id="n-nat">—<small>%</small></div>
+            <div class="bar"><span class="band" id="b-band"></span><i id="b-nat" style="background:var(--blue)"></i></div>
+            <div class="note" id="s-nat">—</div></div>
+          <div class="g"><div class="lb"><b class="est">推定</b>・合意率</div>
+            <div class="num est" id="n-agr">—<small>%</small></div>
+            <div class="bar"><i id="b-agr" style="background:#7aa7d0"></i><span class="goalline" id="b-goal"></span></div>
+            <div class="note" id="s-agr">—</div></div>
+          <div class="g"><div class="lb"><b style="color:var(--orange)">推定</b>・職員の対面対応</div>
+            <div class="num" style="color:var(--orange)" id="n-face">—<small>件</small></div>
+            <div class="bar"><i id="b-face" style="background:var(--orange)"></i></div>
+            <div class="note" id="s-face">—</div></div>
+        </div>
+        <div class="note" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">
+          <b>納得率</b>＝届いた前提での納得の見込み。<b>合意率</b>＝到達率×納得率 ＋ (1−到達率)×0.55（未到達者の消極的黙認）。
+          <b>差は到達率だけから出ます</b>——納得率が0.55より低いうちは合意率のほうが高く（黙認に助けられる）、
+          0.55を超えると合意率のほうが低く出ます（届いていないので取りこぼす）。<br>
+          <b>職員の対面対応</b>＝対面で応対する件数。未回答の論点が残る棟ほど同じ問いが繰り返されます。
+          <b>この量が中立でない理由</b>：自治体職員のカスハラ経験<b>35.0%</b>（民間10.8%の約3倍）、部署別最多は<b>広報公聴66.3%</b>、
+          内容は<b>継続的・執拗な言動72.3%</b>（総務省 実態調査 2025-04-25）。
+          <b>★本モデルはカスハラの発生も加害者の属性も一切推定していません。</b>総量だけを出しています。
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>層別</h2>
+        <table><thead><tr><th>層</th><th>棟</th><th>納得率</th><th>到達率</th><th>合意率</th><th>根拠</th></tr></thead>
+          <tbody id="layers"></tbody></table>
+      </div>
+
+      <div class="card">
+        <h2>モデルの中身／感度分析（係数24個を1つずつ ±50%）</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
+          <div id="inner-l"></div><div id="inner-r"></div>
+        </div>
+        <div class="note" style="margin-top:8px" id="sens-sum">—</div>
+        <table style="margin-top:4px"><thead><tr><th>係数</th><th>下限</th><th>上限</th><th title="上限と下限の広がり。中央から ±この値。上限−下限はこの2倍">幅</th></tr></thead>
+          <tbody id="sens"></tbody></table>
+      </div>
+
+      <div class="warn">
+        <b>これは予測装置ではなく、説明会の設計を試す思考実験装置です。</b><br>
+        ・<b>この数値を理由に説明会を省略・縮小してはなりません。</b><br>
+        ・属性別の挙動は統計的傾向であり、個々の住民の予測ではありません。<br>
+        ・<b>係数もコストも仮です。</b>広瀬・大友(2014)から引用できるのは分散説明率と規定因の順位であって、
+          個別のパス係数は未取得。感度の幅を必ず併せて見てください。<br>
+        ・緑の「説明充足率」だけが条例から機械的に決まる実測値で、係数を含みません。<br>
+        ・<b>「参加者属性の偏り」と「カスハラ加害者の属性」を結ぶ実証研究は確認されていません。</b>
+          本モデルは両者を独立に扱い、因果を一切主張しません。
+      </div>
+    </div>
+
+    <!-- ============ ③ 手で調整 ============ -->
+    <div>
+      <div class="card">
+        <h2>③ 解いた設計を、手で調整する <span id="dirty"></span></h2>
+        <div class="note" style="margin-bottom:6px">
+          下は<b>①が解いた設計を読み込んだ状態</b>です。触ると②の数字が動きます。
+          <button class="act" id="reset">①の解に戻す</button>
+        </div>
+        <div class="fld"><span>便益をどう説明するか</span><select id="benefit"></select></div>
+        <div class="fld"><span>参加者の集め方</span><select id="recruit"></select></div>
+        <div class="fld"><span>会場の発言方式</span><select id="voice">
+          <option value="classroom">自席から発言（公聴会の52%）</option>
+          <option value="podium">発言席あり</option>
+          <option value="smallgroup">少人数討議</option></select></div>
+        <div class="fld"><span>開催回数</span><input id="rounds" type="number" min="1" max="5" value="1" style="width:56px"></div>
+        <div class="fld"><span>提示する案の数</span><input id="plans" type="number" min="1" max="4" value="1" style="width:56px"></div>
+        <label class="row"><input type="checkbox" id="weekend">土日昼の回を追加する</label>
+        <label class="row"><input type="checkbox" id="feedback">意見の扱いを事前に説明し、結果を返す</label>
+        <label class="row"><input type="checkbox" id="traceable">意見の行き先を公開する</label>
+        <label class="row"><input type="checkbox" id="async"><b>非同期・非対面の入力を主経路にする</b></label>
+        <hr style="border:0;border-top:1px solid var(--line);margin:8px 0">
+        <label class="row"><input type="checkbox" id="viz">3D可視化（本アプリ）を使う</label>
+        <label class="row"><input type="checkbox" id="easy">資料を平易化する</label>
+        <label class="row"><input type="checkbox" id="study">事前学習会を開く</label>
+      </div>
+
+      <div class="card">
+        <h2>告知媒体（周辺住民への到達率）</h2>
+        <div id="media"></div>
+        <div class="note" style="margin-top:6px">
+          近隣住民（ア・イ）と当事者は<b>条例第9条1項で個別説明が義務</b>なので到達率1.0。媒体が効くのは周辺住民だけ。
+          市報・HP・SNSは「見ても手続きに反応しない」ゲート（パブコメ認知19.2%）を通ります。</div>
+      </div>
+
+      <div class="card">
+        <h2>配る資料で答える論点</h2>
+        <div id="topics"></div>
+        <div class="note" style="margin-top:6px">
+          未回答の論点は、その論点に対応する不利益を過大に見積もらせます（本モデルの仮定）。
+          <b>t3・t4・t8 は当事者にだけ、t7 は近隣イ（日影）にだけ効きます。</b><br>
+          <b>t1（制度の説明）だけは種類が違います</b>——不利益の大きさではなく<b>理解度 U</b> に足しています。<br>
+          <b>※ t1〜t8 の根拠は一様ではありません。</b>条例の条文に当たるのは <b>t7（日照）</b>の1つだけで、
+          残り7つは用途地域の変更に固有の問いです。→ <code>notes/topics_basis_20260824.md</code></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ★理論のよりどころは画面下の帯にまとめた（2026-08-24 本人指示）。
+     カードとして本文に置くと下まで読まないと出てこないので、常に見える位置へ。 -->
+<div id="pc-gate">
+  <div class="box">
+    <h2>この画面は、PCで開いてください</h2>
+    <p>「合意率の目標から、説明設計を解く」は <b>PC の Chrome</b> を前提に作っています。
+      表・ゲージ・感度分析を横に並べるため、<b>横1,000px以上</b>を想定しています。</p>
+    <p class="why">スマートフォンでは表が読めません。地図側の本体（index.html）も
+      マウスでのドラッグ操作が中心のため、PCでの閲覧をお願いします。</p>
+    <button id="pc-gate-ignore">このまま開く（表示は崩れます）</button>
+  </div>
+</div>
+
+<footer id="refbar">
+  <div class="rb-lbl">理論の<br>よりどころ</div>
+  <div id="refs"></div>
+  <div class="rb-note" title="各ポップアップに「原典が言っていること」「このシミュレータでの使い方（係数名つき）」「画面のどこを触ると効くか」「注意・限界」の4節と、原本へのリンクが入っています。何が実測で何が仮の係数かは出典ごとに違います。">クリックで<br>内容・使い方・原本</div>
+</footer>
+
+<!-- 理論のよりどころのポップアップ。中身は REFS から流し込む。
+     ★動的に触るDOMは <script> より前に置く（index.html で一度これを踏んで起動しなくなった）。 -->
+<div id="ref-modal"><div id="ref-box">
+  <span id="ref-close">×</span>
+  <h3 id="ref-title">—</h3>
+  <div class="cite" id="ref-cite">—</div>
+  <div id="ref-body"></div>
+</div></div>
+
+<script src="consent_model.js"></script>
+<script>
+const M = window.ConsentModel;
+
+/* =======================================================================
+   理論のよりどころ（6つ）。原典が何を言っているか／このモデルでどう使ったか／
+   画面のどこを触ると効くか／何が仮か、を1か所にまとめる。
+   ★リンクは 2026-08-24 に読み取り専用curlで HTTP 200 を確認した実URL。
+   ======================================================================= */
+const REFS = [
+ { k:"hirose",
+   chip:"広瀬・大友(2014)", sub:"社会的受容の骨格",
+   title:"広瀬幸雄・大友章司（2014）市民参加型ごみ処理基本計画が市民に受け入れられ，行政への信頼を醸成するために何が必要か",
+   cite:"『社会安全学研究』第4号 pp.43-50（関西大学社会安全学部）／査読論文・信頼度<b>最高</b>。津島市・選挙人名簿から無作為1,500名抽出 → 有効回答661 → 分析対象414、共分散構造分析（GFI=.93 CFI=.97 RMSEA=.05）",
+   links:[["論文PDF（363KB）","https://www.kansai-u.ac.jp/Fc_ss/common/pdf/bulletin004_43.pdf"],
+          ["『社会安全学研究』第4号 目次","https://www.kansai-u.ac.jp/Fc_ss/center/study/bulletin_004.html"]],
+   says:[
+     "<b>社会的受容の分散86%</b>が「手続き的公正評価」と「計画効果（内容）評価」の<b>2要因だけ</b>で説明できる。",
+     "手続き的公正はさらに<b>4基準</b>（情報開示・参加機会・代表性・結果の統制）で分散84%が説明される。",
+     "★<b>4基準の中で影響が最大なのは「参加機会」</b>（意見表明・議論の機会が十分か）。情報開示ではない。",
+     "★<b>逆因果モデル（もともと行政を信頼していない人は何をしても受容しない）は棄却された</b>（AIC 511.71 vs 594.07／Δχ²(1)=80.36, p&lt;.001）。",
+     "★<b>回答者の3割が、全戸配布を含む市民参加の取り組みを知らなかった。</b>公正な手続きをやっても、届かなければ受容も信頼も上がらない。"],
+   uses:[
+     "納得率の骨格そのもの＝<code>納得 = β_PF·手続き的公正 + β_CE·内容評価 + β_DF·分配的公正</code>。",
+     "手続き的公正の内訳の重みを<b>参加機会を最大</b>に置いた＝<code>wPart .35 / wInfo .25 / wRepr .20 / wCtrl .20</code>（合計1）。",
+     "逆因果の棄却に従い、<b>「初期信頼度」を全部を決める支配変数にしていない</b>（そういう入力は作っていない）。",
+     "「3割が知らなかった」を受けて、<b>到達率 R を納得率とは別の独立変数</b>にした。合意率＝<code>納得×到達 +（1−到達）×既定態度 q0</code>。"],
+   where:["「会場の発言方式」「開催回数」「土日昼の回」＝参加機会",
+          "「意見の扱いを事前に説明し、結果を返す」「意見の行き先を公開する」＝結果の統制",
+          "「告知媒体」＝到達率"],
+   warn:["<b>パス係数の実数値は取れていない。</b>原典の図2が画像で、本調査では読み取れなかった。"
+         + "使えるのは<b>分散説明率と規定因の順位</b>まで。だから<b>係数は仮</b>で、感度分析で幅を出している。"] },
+
+ { k:"elm",
+   chip:"ELM(2013)", sub:"理解度で重みが動く",
+   title:"尾花恭介・広瀬幸雄・藤井聡（2013）精緻化見込みモデルから考察したNIMBY型事業の受容に及ぼす手続き的公正さの影響",
+   cite:"『土木学会論文集D3（土木計画学）』69巻4号 pp.267-275／査読論文・信頼度<b>高</b>",
+   links:[["J-STAGE 論文ページ","https://www.jstage.jst.go.jp/article/jscejipm/69/4/69_267/_article/-char/ja"],
+          ["本文PDF","https://www.jstage.jst.go.jp/article/jscejipm/69/4/69_267/_pdf"]],
+   says:[
+     "<b>事業内容を理解できないとき</b>、人は内容で判断できないので<b>手続きが公正だったかで受容を決める</b>。",
+     "<b>理解できるときでも、内容による判断が難しいほど手続きの影響が強くなる</b>。実験結果はこの仮説を支持した。"],
+   uses:[
+     "★<b>理解度 U を媒介変数に置き、重みを動かす</b>＝<code>β_PF = 0.65 − 0.35·U</code>／<code>β_CE = 0.15 + 0.35·U</code>。"
+     + "U=0 なら手続き優位、U=1 なら内容優位。",
+     "U の作り方＝<code>U0 0.192</code>（パブコメ認知＝理解の下限アンカー・実測）に、"
+     + "<b>3D可視化 +0.35</b>／資料の平易化 +0.15／事前学習会 +0.10 を足す。",
+     "★<b>これが「3D可視化がなぜ効くのか」の理論的な入口。</b>可視化そのものが納得を作るのではなく、"
+     + "<b>理解度を上げて判断の重心を手続きから内容へ移す</b>。用途地域は容積率・日影・既存不適格と専門概念が多く、理解難度が高い＝この論文の想定に合う。"],
+   where:["「3D可視化（本アプリ）を使う」「資料を平易化する」「事前学習会を開く」"],
+   warn:["<b>gViz 0.35 / gEasy 0.15 / gStudy 0.10 は仮の値。</b>論文は「重みが動く」ことを示したが、動く量は与えていない。"] },
+
+ { k:"bias",
+   chip:"参加者バイアス研究", sub:"来る人は市民の縮図ではない",
+   title:"参加者バイアスと影響力バイアスの実証研究",
+   cite:"ワークショップ実測＝『アクション・リサーチ』27(4)／土木学会論文集（WS発言量）／CiNii収録研究（広場活用型WS）／九州大学研究。"
+        + "影響力差＝<b>科研費 22K05880「多様な主体が活躍できる地域づくりワークショップに関する研究」</b>（研究代表者 福與徳文・基盤研究(C)・2022-2025）／信頼度<b>高</b>",
+   links:[["KAKEN 22K05880 研究課題","https://kaken.nii.ac.jp/ja/grant/KAKENHI-PROJECT-22K05880/"]],
+   says:[
+     "WSの実測で<b>男性68%・女性32%</b>、<b>60代32%・50代27%</b>に対し<b>20代0%・30代9%</b>。参加形態は<b>指名73%・公募27%</b>。",
+     "★<b>女性の参加率を確保しても、着座位置と発言回数に男女の影響力差が生じる。</b>"
+     + "＝<b>「出席できる」ことと「そこで発言できる」ことは別</b>。参加者構成を揃えるだけでは足りない。"],
+   uses:[
+     "①<b>代表性 Repr を TVD（総変動距離）で数える。</b>参加者の集め方ごとに実測TVDを持たせた：",
+     "<table><tr><th>集め方</th><th>年代TVD</th><th>性別TVD</th></tr>"
+     + "<tr><td>公募（WS実測）</td><td>0.289</td><td>0.188</td></tr>"
+     + "<tr><td>指名（自治会等・WSの73%）</td><td>0.340</td><td>0.220</td></tr>"
+     + "<tr><td>郵送・全戸配布（実測）</td><td>0.077</td><td>0.060</td></tr>"
+     + "<tr><td>無作為抽出（ミニ・パブリックス）</td><td>0.050</td><td>0.040</td></tr></table>",
+     "②<b>「出席」と「発言」を分けた</b>＝発言機会の実効係数 <code>voiceEqFace 0.55</code>（対面）／<code>voiceEqAsync 0.90</code>（非同期）。"
+     + "非同期・匿名の経路ほど影響力差が小さいという想定。"],
+   where:["「参加者の集め方」（公募／指名／郵送／無作為抽出）","「非同期・非対面の入力を主経路にする」"],
+   warn:["⚠ <b>TVDは年代と性別を別々に計算する。</b>2つの分布を連結して合計するのは誤り（8/23に自前バグとして修正済み）。",
+         "<code>voiceEqFace</code>／<code>voiceEqAsync</code> は仮の値。研究は「差が出る」ことを示したが、差の大きさは与えていない。"] },
+
+ { k:"saitama",
+   chip:"令和5年度 さいたま市民意識調査", sub:"このモデルで唯一「実測」の塊",
+   title:"令和5年度 さいたま市民意識調査（さいたま市 市長公室 秘書広報部 広聴課）",
+   cite:"在住者調査＝満18歳以上・対象5,000人・<b>住民基本台帳に基づく層化多段無作為抽出</b>・郵送配布/回収・有効回収<b>2,215（44.3%）</b>。"
+        + "在勤者調査＝対象2,000人・有効回収550（27.5%）／一次資料・信頼度<b>最高</b>",
+   links:[["調査結果ページ（中間報告書）","https://www.city.saitama.lg.jp/006/002/004/p098168.html"],
+          ["概要版 PDF","https://www.city.saitama.lg.jp/006/002/004/p013864_d/fil/r5gaiyou.pdf"]],
+   says:[
+     "<b>情報媒体の接触率</b>：市報さいたま55.4%／市・区のHP43.6%／SNS28.0%／自治会の回覧板16.9%。",
+     "★<b>パブリック・コメントを知っている人は19.2%</b>（タウンミーティング15.8%）。"
+     + "用途地域変更は都市計画法でパブコメ・公聴会・縦覧を伴うのに、<b>その制度自体を8割が知らない</b>。",
+     "★<b>幹線道路に最も求める機能＝安全63.5% ／ 快適・利便19.6 ／ 防災9.3 ／ 環境3.7 ／ にぎわい・活力 1.3%</b>。",
+     "持ち家（一戸建て52.9＋集合22.7）＝<b>75.6%</b>。定住意向85.2%。今後参加したい活動が「特にない」38.6%。"],
+   uses:[
+     "<b>媒体別の到達率をそのまま使っている</b>（市報0.554／HP0.436／SNS0.280／回覧板0.169）。"
+     + "回覧板は手渡しなので<b>制度認知のゲートを通さない</b>扱いにした。",
+     "パブコメ認知19.2%を<b>2か所</b>に使う＝理解度の下限 <code>U0</code> と、"
+     + "媒体に触れた人が手続きに反応する率のゲート <code>gateAware</code>。",
+     "★<b>便益の訴求軸の重み</b>をそのまま係数にした（安全0.635 … にぎわい0.013）。"
+     + "<b>「にぎわい」で説明するか「安全」で説明するかだけで納得率が大きく動く。ここは仮の係数ではなく市民の実測。</b>",
+     "持ち家75.6% → 分配的公正の強さを所有形態で変える（<b>賃貸は0.45倍</b>）。"],
+   where:["「便益をどう説明するか」","「告知媒体（周辺住民への到達率）」"],
+   warn:["⚠ <b>回答者そのものが偏っている</b>（男性 -6.9%／20代 -5.1%／60代 +5.4%、市の人口比との差）。"
+         + "媒体接触率もこの偏りを含んだ数字である。",
+         "<code>q0 0.55</code>（未到達者の既定態度）は、定住意向85.2%と「特にない」38.6%からの<b>仮置き</b>。実測ではない。"] },
+
+ { k:"yokohama",
+   chip:"横浜市 合意形成ガイド", sub:"到達しうる水準の物差し",
+   title:"横浜市『地区計画策定に向けての合意形成』（都市整備局・実務ガイド）",
+   cite:"行政実務資料（一次）／信頼度<b>高</b>",
+   links:[["ガイド本体 PDF","https://www.city.yokohama.lg.jp/kurashi/machizukuri-kankyo/toshiseibi/suishin/minnade/hakkoubutu/goui-guide.files/0103_20191017.pdf"],
+          ["横浜市 地区計画・建築協定等","https://www.city.yokohama.lg.jp/kurashi/machizukuri-kankyo/toshiseibi/plan-rule/"]],
+   says:[
+     "建築協定の締結活動を3回経て機運が高く、検討区域が自治会区域と一致していた<b>好条件の地区でも、都市計画決定まで足かけ6年</b>。",
+     "★最終意向確認調査での反対は<b>地権者約900人のうち20人＝2.2%（合意97.8%）</b>。",
+     "★<b>「反対意見については『何に反対しているのか』を明確にする必要がある」</b>（用途の制限案の何に反対なのか、なぜ共同住宅の規制に反対なのか）。"],
+   uses:[
+     "①<b>校正のアンカー。</b>好条件で97.8%。本モデルの最良時の周辺住民は<b>93.8%</b>で、"
+     + "<b>境界・用途混在地なのでそれより低く出るのが正しい</b>という向きの確認に使っている。",
+     "②<b>「何に反対か」を論点t1〜t8に分解した。</b>資料で答えた論点は不安が解け、"
+     + "<b>答えていない論点は、その論点に対応する不利益を過大に見積もらせる</b>（<code>lossAmp 0.60</code>）。"],
+   where:["「配る資料で答える論点」のチェックボックス（t1〜t8）"],
+   warn:["<code>lossAmp 0.60</code> は<b>査読文献の係数ではなく本モデルの仮定</b>。"
+         + "ガイドの「何に反対かを明確にする必要がある」という記述に対応させただけである。",
+         "⚠ <b>t1〜t8 の根拠は一様ではない</b>（条例の条文そのものは t3・t4 の2つだけ）。論点の設計自体は再検討中。"] },
+
+ { k:"kasuhara",
+   chip:"総務省 ハラスメント実態調査", sub:"対面の総量が中立でない理由",
+   title:"総務省『地方公共団体における各種ハラスメントに関する職員アンケート調査結果』（2025-04-25 公表）",
+   cite:"無作為抽出した388の都道府県・市区町村の一般行政部門の職員20,000人（常勤14,191／非常勤5,809）を対象、"
+        + "<b>11,507人が回答</b>／一次資料・信頼度<b>最高</b>",
+   links:[["総務省 調査結果・取組事例集・通知","https://www.soumu.go.jp/main_sosiki/jichi_gyousei/koumuin_seido/harassment.html"],
+          ["報道資料（公表ページ）","https://www.soumu.go.jp/menu_news/s-news/01gyosei11_02000240.html"]],
+   says:[
+     "過去3年間にカスタマーハラスメントを受けた経験がある自治体職員は<b>35.0%</b>（民間10.8%の約3倍）。",
+     "★部署別で最も高いのは<b>広報公聴 66.3%</b>＝<b>意見を受け付ける窓口が最も損耗する</b>。",
+     "被害は<b>30代44.6%・20代以下40%</b>に集中。内容は<b>継続的・執拗な言動72.3%</b>。",
+     "きっかけは<b>不満のはけ口・嫌がらせ72.5%</b>。「何回も繰り返す人はいない」との回答は<b>9.4%</b>。"],
+   uses:[
+     "★<b>誰が加害するかは一切モデル化していない。</b>4つ目の出力＝<b>職員の対面対応の総量（件）だけ</b>を出す。",
+     "非同期経路が無ければ対面比率は<code>faceShareBase 1.00</code>。"
+     + "非同期・非対面の入力を用意すると<code>asyncTake 0.65</code> がそちらへ流れる。",
+     "<b>未回答の論点が残っている棟は、問い合わせが <code>repeatAmp 1.20</code> 倍</b>になる。",
+     "この調査を置く理由は<b>「同じ100件でも中立ではない」と言うため</b>。"
+     + "非同期経路を用意する価値が、納得率とは別の軸（職員の損耗）で数字になる。"],
+   where:["「非同期・非対面の入力を主経路にする」","「配る資料で答える論点」（未回答が減ると反復も減る）"],
+   warn:["⚠ <b>「参加者属性の偏り」と「カスハラ加害者の属性」を結ぶ実証研究は確認できていない。</b>"
+         + "この2つを因果でつないではいけない。本モデルは<b>総量だけ</b>を扱い、属性別の加害確率は持たない。",
+         "<code>asyncTake</code>／<code>repeatAmp</code> は仮の値。"] }
+];
+
+function refHTML(r) {
+  const li = a => "<ul>" + a.map(x => "<li>" + x + "</li>").join("") + "</ul>";
+  return "<h4>原典が言っていること</h4>" + li(r.says)
+       + "<h4 class='use'>このシミュレータでの使い方</h4>" + li(r.uses)
+       + "<h4 class='use'>画面のどこを触ると効くか</h4>" + li(r.where)
+       + "<h4 class='warn'>注意・限界</h4>" + li(r.warn);
+}
+
+(function buildRefs() {
+  const box = document.getElementById("refs");
+  box.innerHTML = REFS.map((r, i) =>
+    '<button class="refchip" data-i="' + i + '"><b>' + r.chip + "</b><span>" + r.sub + "</span></button>").join("");
+  const m = document.getElementById("ref-modal");
+  box.addEventListener("click", e => {
+    const b = e.target.closest(".refchip"); if (!b) return;
+    const r = REFS[+b.dataset.i];
+    document.getElementById("ref-title").textContent = r.title;
+    document.getElementById("ref-cite").innerHTML = r.cite
+      + '<div class="hits">原典：' + r.links.map(l =>
+          '<a href="' + l[1] + '" target="_blank" rel="noopener">' + l[0] + " ↗</a>").join(" ／ ") + "</div>";
+    document.getElementById("ref-body").innerHTML = refHTML(r);
+    document.getElementById("ref-box").scrollTop = 0;
+    m.classList.add("open");
+  });
+  document.getElementById("ref-close").addEventListener("click", () => m.classList.remove("open"));
+  m.addEventListener("click", e => { if (e.target === m) m.classList.remove("open"); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") m.classList.remove("open"); });
+})();
+
+let DATA = null, COHORT = null, SOL = null, plan = null, target = 2/3;
+const $ = id => document.getElementById(id);
+const f1 = x => (x * 100).toFixed(1);
+const TARGETS = [2/3, 3/4, 4/5];
+const TNAME = t => Math.abs(t-2/3)<1e-6 ? "2/3" : Math.abs(t-0.75)<1e-9 ? "3/4" : "4/5";
+
+/* ★2026-08-24 に論点を全面的に入れ替えた（本人設計）。index.html の TOPICS と同じ並び。 */
+const TOPIC_TEXT = {
+  t1:"用途地域の変更とは何か（法律上どう変わるのか）",
+  t2:"土地・建物の資産価値は上がるのか／下がるのか",
+  t3:"建て替えたとき、同じ規模の建物を建てられるのか",
+  t4:"いま行っている事業は続けられるのか（用途の制限）",
+  t5:"住宅地として住みやすくなるのか",
+  t6:"商業地として商売が成り立つのか（治安は悪くならないか）",
+  t7:"日当たりはどれくらい変わるのか",
+  t8:"建て替えなくても、直後から変わることはあるのか"
+};
+const LAYER_JA = { subject:"当事者（既存不適格）", kinA:"近隣ア（15m かつ 50m）",
+                   kinB:"近隣イ（高さ2倍 かつ 日影）", shuu:"周辺住民" };
+const LAYER_WHY = { subject:"高度地区の絶対高さを超える", kinA:"外周からの実距離で減衰",
+                    kinB:"冬至日7時刻のうち影に入る時刻数", shuu:"弱い負・媒体依存" };
+
+/* --- コントロールの器 --- */
+Object.keys(M.BENEFIT).forEach(k => {
+  const o = document.createElement("option");
+  o.value = k; o.textContent = M.BENEFIT[k].label + "（重み " + M.BENEFIT[k].sal + "）";
+  $("benefit").appendChild(o);
+});
+Object.keys(M.RECRUIT).forEach(k => {
+  const o = document.createElement("option"); o.value = k; o.textContent = M.RECRUIT[k].label;
+  $("recruit").appendChild(o);
+});
+Object.keys(M.MEDIA).forEach(k => {
+  const md = M.MEDIA[k];
+  const l = document.createElement("label"); l.className = "row";
+  l.innerHTML = '<input type="checkbox" data-m="' + k + '">' +
+    "<span>" + md.label + " <span style='color:var(--sub);font-size:11.5px'>接触 " +
+    (md.reach * 100).toFixed(1) + "%" + (md.gated ? "・ゲートあり" : "・直接届く") + "</span></span>";
+  l.querySelector("input").addEventListener("change", pull);
+  $("media").appendChild(l);
+});
+Object.keys(TOPIC_TEXT).forEach(t => {
+  const l = document.createElement("label"); l.className = "row";
+  l.innerHTML = '<input type="checkbox" data-t="' + t + '"><span><b>' + t + "</b> " + TOPIC_TEXT[t] + "</span>";
+  l.querySelector("input").addEventListener("change", () => { pull(); pushAnsweredToParent(); });
+  $("topics").appendChild(l);
+});
+["benefit","recruit","voice","rounds","plans","weekend","feedback","traceable","async","viz","easy","study"]
+  .forEach(id => $(id).addEventListener("change", pull));
+
+document.querySelectorAll(".goal").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".goal").forEach(x => x.classList.remove("on"));
+  b.classList.add("on"); target = Number(b.dataset.t); solveAndLoad();
+}));
+$("off").addEventListener("change", () => { COHORT = DATA[$("off").value]; solveAndLoad(); });
+$("reset").addEventListener("click", () => loadPlan(SOL.planAt));
+
+/* --- ①を解いて、③に読み込む --- */
+function solveAndLoad() {
+  SOL = M.solve(COHORT, TARGETS);
+  // 選んだ目標に達した時点までの設計を ③ の初期値にする
+  const mk = SOL.marks.find(m => Math.abs(m.target - target) < 1e-6);
+  const upto = mk && mk.reached ? mk.atStep : SOL.steps.length;
+  let p = Object.assign({}, M.BASE_PLAN); p.media = p.media.slice();
+  for (let i = 0; i < upto; i++) {
+    const m = M.MEASURES.find(x => x.id === SOL.steps[i].id);
+    p = Object.assign({}, p, m.apply(p));
+  }
+  SOL.planAt = p;
+  renderRecipe(upto);
+  loadPlan(p);
+}
+
+function loadPlan(p) {
+  plan = Object.assign({}, p); plan.media = p.media.slice();
+  $("benefit").value = plan.benefit; $("recruit").value = plan.recruit;
+  $("voice").value = plan.voice; $("rounds").value = plan.rounds; $("plans").value = plan.plans;
+  ["weekend","feedback","traceable","async","viz","easy","study"].forEach(k => $(k).checked = !!plan[k]);
+  document.querySelectorAll("#media input").forEach(e => e.checked = plan.media.indexOf(e.dataset.m) >= 0);
+  const ans = plan.answered || M.DEFAULT_ANSWERED;
+  document.querySelectorAll("#topics input").forEach(e => e.checked = !!ans[e.dataset.t]);
+  render();
+}
+
+/* ③ の操作を plan に取り込む */
+function pull() {
+  const ans = {};
+  document.querySelectorAll("#topics input").forEach(e => ans[e.dataset.t] = e.checked);
+  plan = { benefit:$("benefit").value, recruit:$("recruit").value, voice:$("voice").value,
+    rounds:Number($("rounds").value), plans:Number($("plans").value),
+    weekend:$("weekend").checked, feedback:$("feedback").checked, traceable:$("traceable").checked,
+    async:$("async").checked, viz:$("viz").checked, easy:$("easy").checked, study:$("study").checked,
+    media:Array.from(document.querySelectorAll("#media input:checked")).map(e => e.dataset.m),
+    answered:ans };
+  render();
+}
+
+/* --- ①のレシピ表 --- */
+function renderRecipe(upto) {
+  const s = M.estimate(COHORT, M.BASE_PLAN);
+  $("startline").innerHTML = "<b>何もしない状態</b>（市報のみ・平日夜1回・自席発言・単一案・にぎわいで説明・公募）" +
+    " → 合意率 <b>" + f1(s.agree) + "%</b> ／ 納得率 " + f1(s.nattoku) + "% ／ 職員の対面対応 <b>" +
+    Math.round(s.face) + "件</b>　<b>目標まで " + "-" + f1(target - s.agree) + "% 足りない。</b>";
+
+  const hitAt = {};
+  SOL.marks.forEach(m => { if (m.reached && m.atStep > 0) hitAt[m.atStep] = m.target; });
+  $("recipe").innerHTML = SOL.steps.map((st, i) => {
+    const beyond = i >= upto;
+    const hit = hitAt[i + 1];
+    const badge = hit != null
+      ? '<span class="badge' + (Math.abs(hit-target)<1e-6 ? "" : " next") + '">◀ ' + TNAME(hit) + " 達成</span>" : "";
+    return '<tr class="' + (beyond ? "beyond" : "") + (hit != null && Math.abs(hit-target)<1e-6 ? " hit" : "") + '">' +
+      "<td>" + (i + 1) + "</td>" +
+      "<td>" + st.label + (st.cost === 0 ? '<span class="free">コスト0</span>' : "") + badge +
+        '<span class="why">' + st.why + "</span></td>" +
+      "<td>" + st.cost + "</td><td>" + st.cumCost + "</td>" +
+      "<td><b>" + f1(st.agree) + "%</b></td><td>" + f1(st.nattoku) + "%</td>" +
+      "<td>" + Math.round(st.face) + "件</td></tr>";
+  }).join("");
+
+  $("marks").innerHTML = SOL.marks.map(m => {
+    if (!m.reached) return "✗ <b>" + TNAME(m.target) + " には届きません</b>（打てる手が尽きた）";
+    const alone = M.solve(COHORT, [m.target]);
+    const prem = m.cost - alone.cost;
+    const cur = Math.abs(m.target - target) < 1e-6;
+    return (cur ? "★ <b>" : "・") + TNAME(m.target) + "＝" + m.atStep + "手・累計コスト " + m.cost +
+      (cur ? "</b>" : "") +
+      "<span style='color:var(--sub)'>（最初からこの目標だけを狙えば " + alone.cost +
+      (prem > 0 ? "。<b>段階的に上げた分の割高 +" + prem + "</b>" : "。割高なし") + "）</span>";
+  }).join("<br>");
+}
+
+/* --- ②③の描画 --- */
+function satisfaction(cohort, ans) {
+  let ok = 0; cohort.forEach(r => { if (r.topics.every(t => ans[t])) ok++; });
+  return { ok: ok, total: cohort.length };
+}
+
+function render() {
+  const e = M.estimate(COHORT, plan);
+  const sat = satisfaction(COHORT, plan.answered || M.DEFAULT_ANSWERED);
+  const ref = M.estimate(COHORT, SOL.planAt);
+  const same = JSON.stringify(plan) === JSON.stringify(Object.assign({}, SOL.planAt, { answered: plan.answered }))
+               && JSON.stringify(plan.answered) === JSON.stringify((SOL.planAt.answered || M.DEFAULT_ANSWERED));
+  $("dirty").innerHTML = Math.abs(e.agree - ref.agree) < 1e-9 ? "" :
+    '<span class="dirty">（①の解から ' + (e.agree > ref.agree ? "+" : "") + f1(e.agree - ref.agree) + "%）</span>";
+
+  const sr = sat.ok / sat.total;
+  $("n-sat").innerHTML = f1(sr) + "<small>%</small>";
+  $("b-sat").style.width = sr * 100 + "%";
+  $("s-sat").textContent = sat.ok + " / " + sat.total + " 棟（論点を1つも残していない棟）";
+
+  $("n-nat").innerHTML = f1(e.nattoku) + "<small>%</small>";
+  $("b-nat").style.width = e.nattoku * 100 + "%";
+
+  $("n-agr").innerHTML = f1(e.agree) + "<small>%</small>";
+  $("b-agr").style.width = e.agree * 100 + "%";
+  $("b-goal").style.left = "calc(" + target * 100 + "% - 1px)";
+  $("n-agr").style.color = e.agree >= target ? "var(--green)" : "var(--red)";
+  $("s-agr").innerHTML = "到達率 " + f1(e.reach) + "%（周辺住民 " + f1(e.Rshuu) + "%）<br>" +
+    (e.agree >= target ? "<b style='color:var(--green)'>目標 " + TNAME(target) + " 達成</b>"
+                       : "<b style='color:var(--red)'>目標まで " + "-" + f1(target - e.agree) + "%</b>");
+
+  $("n-face").innerHTML = Math.round(e.face) + "<small>件</small>";
+  $("b-face").style.width = Math.min(100, e.face / 4) + "%";
+  $("s-face").textContent = "1棟あたり " + e.facePer.toFixed(2) + " 件（対面比率 " + f1(e.faceShare) + "%）";
+
+  $("layers").innerHTML = ["subject","kinA","kinB","shuu"].map(L => {
+    const b = e.byLayer[L]; if (!b) return "";
+    return "<tr><td style='text-align:left'>" + LAYER_JA[L] + "</td><td>" + b.n + "</td><td>" +
+      f1(b.p/b.n) + "%</td><td>" + f1(b.r/b.n) + "%</td><td>" + f1(b.a/b.n) +
+      "%</td><td style='text-align:left;color:var(--sub);font-size:11.5px'>" + LAYER_WHY[L] + "</td></tr>";
+  }).join("");
+
+  const kv = (k, v) => '<div class="kv"><span>' + k + "</span><span>" + v + "</span></div>";
+  $("inner-l").innerHTML = kv("理解度 U", e.U.toFixed(3)) + kv("→ 手続きの重み β_PF", e.bPF.toFixed(3)) +
+    kv("→ 内容の重み β_CE", e.bCE.toFixed(3)) + kv("参加機会", e.PF_common.Part.toFixed(3));
+  $("inner-r").innerHTML =
+    kv("代表性", e.PF_common.Repr.toFixed(3) + "（年代TVD " + e.tvdAge.toFixed(3) + "）") +
+    kv("結果の統制", e.PF_common.Ctrl.toFixed(3)) + kv("実効性（便益）", e.Eff.toFixed(3)) +
+    kv("周辺住民への到達率", f1(e.Rshuu) + "%");
+
+  const sn = M.sensitivity(COHORT, plan);
+  $("b-band").style.left = sn.lo * 100 + "%";
+  $("b-band").style.width = (sn.hi - sn.lo) * 100 + "%";
+  $("s-nat").textContent = "感度の幅 " + f1(sn.lo) + "% 〜 " + f1(sn.hi) + "%";
+  $("sens-sum").innerHTML = "係数を1つずつ±50%振ると、納得率は <b>" + f1(sn.lo) + "% 〜 " + f1(sn.hi) +
+    "%</b> に広がります（納得率のバーの薄い帯）。";
+  $("sens").innerHTML = sn.rows.slice(0, 6).map(r =>
+    "<tr><td style='text-align:left'><code>" + r.k + "</code></td><td>" + f1(r.l) + "%</td><td>" +
+    f1(r.h) + "%</td><td>" + "±" + f1(r.span / 2) + "%</td></tr>").join("");
+}
+
+/* =======================================================================
+   ★埋め込みモード（2026-08-24 本人指示）
+   index.html の凡例の「⤢」から、この画面をオーバーレイで開く。
+   ・index の用途地域境の位置（offsetM）を受け取り、いちばん近い断面に合わせる
+   ・index の論点チェック（answered）を受け取り、変更したら index に返す
+   ・index 側は画面を消さずに重ねるだけなので、戻ると直前の状態がそのまま残る
+   ⚠ 「拡大」側（offsetM ≧ 0）のコホートは無い。**説明対象が0棟になる**ため。
+      その場合は解かずに理由を出す。 ======================================= */
+const EMBED = new URLSearchParams(location.search).get("embed") === "1";
+
+/* ★スマホ案内。index.html から iframe で開かれているときは出さない（親側が出している） */
+(function () {
+  const gate = document.getElementById("pc-gate");
+  if (EMBED) return;
+  let dismissed = false;
+  const coarse = () => window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  const check = () => {
+    if (dismissed) { gate.classList.remove("on"); return; }
+    gate.classList.toggle("on", window.innerWidth < 1000 || (coarse() && window.innerWidth < 1280));
+  };
+  document.getElementById("pc-gate-ignore").addEventListener("click", () => {
+    dismissed = true; gate.classList.remove("on");
+  });
+  check();
+  window.addEventListener("resize", check);
+  window.addEventListener("orientationchange", check);
+})();
+let embedOffset = null, embedAnswered = null;
+
+/* いちばん近い断面を選ぶ（コホートは 10m 刻み） */
+function nearestKey(off) {
+  const keys = Object.keys(DATA).map(Number).sort((a, b) => a - b);
+  let best = null, bd = Infinity;
+  keys.forEach(k => { const d = Math.abs(k - off); if (d < bd) { bd = d; best = k; } });
+  return { key: String(best), diff: Math.round(Math.abs(best - off)) };
+}
+
+function applyEmbedOffset(off) {
+  embedOffset = off;
+  const box = $("embed-note");
+  box.style.display = "";
+  document.querySelectorAll(".page .card").forEach(c => c.style.opacity = "");
+  if (!(off <= -5)) {
+    box.innerHTML = '<b style="color:var(--red)">この向きでは条例上の説明対象が発生しません（0棟）。</b> '
+      + '<span style="color:var(--sub)">商業側が広がる向き（拡大）では、高さの上限が外れるだけで'
+      + '既存不適格が1棟も生じないためです（実測：60m拡大で「現に20m超」0棟）。'
+      + '地図に戻って<b>商業を後退</b>させると、ここに数字が出ます。</span>';
+    document.querySelectorAll(".page .card").forEach(c => {
+      if (!c.contains(box)) c.style.opacity = "0.25";
+    });
+    return;
+  }
+  const n = nearestKey(off);
+  COHORT = DATA[n.key];
+  box.innerHTML = "地図から <b>商業を" + Math.round(-off) + "m後退</b> を受け取りました"
+    + (n.diff > 0 ? '<span style="color:var(--sub)">（いちばん近い断面 '
+        + Math.abs(Number(n.key)) + "m で計算しています。差 " + n.diff + "m）</span>" : "")
+    + '<span style="color:var(--sub)"> ／ 説明対象 ' + COHORT.length + "棟</span>";
+  solveAndLoad();
+  /* ★solveAndLoad() は③に「解いた設計」を読み込む＝論点が全部チェック済みになる。
+     それでは地図の説明充足率と食い違うので、地図から受け取ったチェックで上書きする。
+     ①（レシピ）は BASE_PLAN から解くので影響を受けない。 */
+  if (embedAnswered) {
+    const p = Object.assign({}, plan); p.answered = Object.assign({}, embedAnswered);
+    loadPlan(p);
+  }
+}
+
+window.ConsentEmbed = {
+  /* index から呼ばれる。ctx = { offsetM, answered } */
+  setContext: function (ctx) {
+    if (!DATA) { window.__pendingCtx = ctx; return; }
+    embedAnswered = (ctx && ctx.answered) ? Object.assign({}, ctx.answered) : null;
+      applyEmbedOffset(Number((ctx && ctx.offsetM) || 0));
+  },
+  isReady: function () { return !!DATA; }
+};
+
+/* 論点を触ったら index 側のチェックにも返す */
+function pushAnsweredToParent() {
+  if (!EMBED) return;
+  try {
+    const ans = {};
+    document.querySelectorAll("#topics input").forEach(e => ans[e.dataset.t] = e.checked);
+    if (parent && parent.IndexEmbed && parent.IndexEmbed.setAnswered) parent.IndexEmbed.setAnswered(ans);
+  } catch (e) { /* 別オリジンなら何もしない */ }
+}
+
+fetch("data/consent_cohort.json").then(r => r.json()).then(d => {
+  DATA = d;
+  const keys = Object.keys(DATA).map(Number).sort((a, b) => b - a);
+  $("off").innerHTML = keys.map(k =>
+    '<option value="' + k + '"' + (k === -60 ? " selected" : "") + ">商業を" + (-k) + "m後退</option>").join("");
+  if (EMBED) $("off").style.display = "none";
+  COHORT = DATA[$("off").value];
+  solveAndLoad();
+  if (window.__pendingCtx) { const c = window.__pendingCtx; window.__pendingCtx = null;
+                             window.ConsentEmbed.setContext(c); }
+}).catch(err => {
+  document.querySelector(".page").insertAdjacentHTML("afterbegin",
+    '<div class="warn">data/consent_cohort.json が読めません。<code>cd dev && node dump_cohort.js</code> を実行してください。<br>' + err + "</div>");
+});
+</script>

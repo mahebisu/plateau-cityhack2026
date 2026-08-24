@@ -1,0 +1,61 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       139.636172,
+       35.891529
+      ],
+      [
+       139.637417,
+       35.892023
+      ],
+      [
+       139.637028,
+       35.892671
+      ],
+      [
+       139.635783,
+       35.892177
+      ],
+      [
+       139.636172,
+       35.891529
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "id": "shinchosha_kihonsekkei_2604",
+    "name": "さいたま市 新庁舎（基本設計）",
+    "h": 94.0,
+    "h_src": "kihonsekkei",
+    "storeys": 19,
+    "basement": 1,
+    "site_area": 15000,
+    "fpa": 10000,
+    "bcr_plan": 67,
+    "tfa": 64000,
+    "tfa_main": 54000,
+    "floor_area_far": 50000,
+    "far_plan": 330,
+    "far_spec": 400,
+    "bcr_spec": 80,
+    "zone_now": 10,
+    "zone_now_name": "商業地域",
+    "far_now": 400,
+    "fireproof": "防火地域",
+    "usage": "庁舎",
+    "lod2": false,
+    "grp": "shinchosha",
+    "source": "さいたま市新庁舎整備基本設計説明書（令和8年4月・令和8年8月10日修正）",
+    "note": "外周は実際の設計図ではない。建築面積 約10,000㎡ に合わせた125m×80mの矩形を、商業地域400/80の街区内で建物のない範囲の中心に、街区の辺の向きに合わせて置いた概略。"
+   }
+  }
+ ]
+}
