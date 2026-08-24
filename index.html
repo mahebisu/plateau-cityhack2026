@@ -531,7 +531,7 @@
     </div>
     <div class="btn-group" id="layer-toggle">
       <span class="lbl">重ね</span>
-      <button class="active" data-layer="zones" title="用途地域の区画（urf:UseDistrict）の面と境界。さいたま市全域の外周線は常に出ます">用途地域の区画</button>
+      <button data-layer="zones" title="用途地域の区画（urf:UseDistrict）の面と境界。★起動時はOFF（地図と建物を先に見せるため）。さいたま市全域の外周線は常に出ます">用途地域の区画</button>
       <button class="active" data-layer="base" title="国土地理院の淡色地図タイル">地理院地図</button>
       <button class="active" data-layer="chome" title="丁目までの地名（e-Stat 令和2年国勢調査 小地域の重心）。ズームを引くと大きい丁目だけ残ります">丁目名</button>
       <button data-layer="roads" title="PLATEAU udx/tran の道路（tran:Road）。初回は6.5MBを読み込みます">道路</button>
@@ -1164,7 +1164,7 @@ let cityOutline = null; // さいたま市全域の外周（1本。区画の境�
 let shincho = null;     // 新庁舎（基本設計の諸元で建てた仮想の棟）
 let shinchoOn = true;   // ★既定で建てておく。ボタンで現況に戻す
 let colorMode = "zone"; // zone | used | plain（plain＝色分けなし）
-let showZones = true;
+let showZones = false;   // ★起動時はOFF（2026-08-24 本人指示）。市域の外周線は別レイヤで常時表示
 let showBase = true;
 
 /* ---------------- 地図 ---------------- */
@@ -1345,12 +1345,16 @@ function addLayers() {
   map.addSource("zones", { type: "geojson", data: zones });
   map.addSource("buildings", { type: "geojson", data: buildings });
 
+  /* ★起動時は非表示（2026-08-24 本人指示）。「用途地域の区画」ボタンで出す。
+     市域の外周（city-outline-*）は別レイヤで常時表示なので、地図の枠は消えない。 */
   map.addLayer({
     id: "zones-fill", type: "fill", source: "zones",
+    layout: { visibility: "none" },
     paint: { "fill-color": zoneColorExpr("fn"), "fill-opacity": 0.18 }
   });
   map.addLayer({
     id: "zones-line", type: "line", source: "zones",
+    layout: { visibility: "none" },
     paint: { "line-color": "#4a5259", "line-width": 1.4, "line-opacity": 0.75 }
   });
 
