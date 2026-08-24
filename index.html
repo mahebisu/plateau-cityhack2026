@@ -282,21 +282,41 @@
   #pc-gate button:hover { filter: brightness(1.15); }
   #pc-gate .note { color: #8fa0b0; font-size: 11.5px; margin-top: 12px; }
 
-  /* ★凡例から納得率シミュレータを開くボタン */
+  /* ★右帯に置く「納得率シミュレータ」の入口（2026-08-24 本人指示）。
+     ⚠ 右帯は縦にスクロールする（実測 scrollHeight 1,672px / 表示 569px）。
+        ふつうに置くと画面の外に出て、また「わかりにくい」に戻る。
+        → sticky で帯の下端に貼り付け、スクロール位置によらず常に見えるようにする。 */
   #consent-open {
-    float: right; margin-right: 8px; cursor: pointer; font-weight: 700;
-    color: var(--accent); border: 1px solid #cfe0f0; background: #eef5fb;
-    border-radius: 4px; padding: 0 6px; font-size: 10.5px; line-height: 16px;
+    position: sticky; bottom: 0; z-index: 3;
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    font-family: inherit; text-align: left; cursor: pointer;
+    margin: 6px 0 2px; padding: 9px 11px; border-radius: 7px;
+    border: 1px solid #b9d3ea; background: linear-gradient(180deg, #f4f9fd, #e8f2fb);
+    color: var(--accent);
+    box-shadow: 0 -6px 12px -6px rgba(20,30,40,.18);
   }
-  #consent-open:hover { background: #dbeaf7; }
+  #consent-open:hover { background: linear-gradient(180deg, #eaf4fc, #d9eaf8); border-color: var(--accent); }
+  #consent-open .co-ic { font-size: 17px; line-height: 1; flex: 0 0 auto; }
+  #consent-open .co-tx { display: block; line-height: 1.42; }
+  #consent-open .co-tx b { font-size: 12.5px; }
+  #consent-open .co-sub { display: block; color: var(--sub); font-size: 10.5px; font-weight: 400; }
 
   /* ★納得率シミュレータのオーバーレイ。index は消さずに重ねるだけなので、
      閉じると直前の状態（線の位置・色分け・チェック）がそのまま残る。 */
+  /* ★全画面ではなく「地図の上に浮く85%の板」にする（2026-08-24 本人指示）。
+     周りに元の画面が見えていることで、戻れることが分かる＝閉じ忘れない。 */
   #consent-overlay {
     position: fixed; inset: 0; z-index: 70; display: none;
-    flex-direction: column; background: rgba(20,24,28,.5);
+    align-items: center; justify-content: center;
+    background: rgba(20,24,28,.45);
   }
   #consent-overlay.open { display: flex; }
+  #co-card {
+    width: 85vw; height: 85vh; max-width: 1560px;
+    display: flex; flex-direction: column; overflow: hidden;
+    background: #f4f7fa; border-radius: 10px;
+    box-shadow: 0 18px 60px rgba(0,0,0,.45);
+  }
   #co-bar {
     flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
     padding: 7px 14px; background: #1f2328; color: #fff; font-size: 12px;
@@ -521,11 +541,7 @@
     <div id="map">
       <div id="loading">実データを読み込んでいます…</div>
       <div id="map-legend">
-        <div class="legend-head">線を動かしたときの色
-          <span class="sub" style="font-weight:400;cursor:pointer;float:right" id="legend-close">×</span>
-          <!-- ★ここから納得率シミュレータ（consent.html）を重ねて開く（2026-08-24 本人指示） -->
-          <span id="consent-open" title="いまの用途地域境の位置と論点のチェックを渡して、納得率シミュレータを画面に重ねて開きます">⤢ 納得率</span>
-        </div>
+        <div class="legend-head">線を動かしたときの色 <span class="sub" style="font-weight:400;cursor:pointer;float:right" id="legend-close">×</span></div>
         <div class="legend-body">
         <div class="lg"><span class="rail"></span><span><b>黒白の線</b>＝いま動かしている線<span class="sub">（両端の●まで。掴んで動かせます）</span></span></div>
         <!-- ★凡例から外した3行（2026-08-24 本人指示）＝「灰の破線＝もとの線（現行）」
@@ -624,6 +640,16 @@
         <div id="used-chip">📐 容積消化率の計算式（クリックで説明）</div>
       </div>
 
+      <!-- ★納得率シミュレータへの入口（2026-08-24 本人指示で凡例から右帯へ移した）。
+           位置＝#side の最後。★sticky(bottom:0) は「自分より後ろの内容」に押し上げられるので、
+           最後の子でないとスクロール下端で画面から消える（2026-08-24 実測で踏んだ）。 -->
+      <button id="consent-open" type="button"
+        title="いまの用途地域境の位置と、上のチェックの状態をそのまま渡します。地図の上に重ねて開くので、閉じれば元の画面に戻ります">
+        <span class="co-ic">◱</span>
+        <span class="co-tx"><b>納得率シミュレータをひらく</b>
+          <span class="co-sub">ここまでは<b>実測</b>。この先は<b>推定</b>です</span></span>
+      </button>
+
     </div>
   </div>
   <!-- ★操作ボタンは上帯から下帯へ移した（2026-08-24 本人指示）。
@@ -648,12 +674,14 @@
      iframe で読む＝2つのプロトタイプを別ファイルのまま保てる（dev/PROTOTYPES.md の切り分けを壊さない）。
      ⚠ 動的に触るDOMは <script> より前に置く。 -->
 <div id="consent-overlay">
-  <div id="co-bar">
-    <b>納得率シミュレータ</b>
-    <span id="co-ctx">—</span>
-    <span id="co-close">× 地図に戻る</span>
+  <div id="co-card">
+    <div id="co-bar">
+      <b>納得率シミュレータ</b>
+      <span id="co-ctx">—</span>
+      <span id="co-close">× 地図に戻る</span>
+    </div>
+    <iframe id="co-frame" title="納得率シミュレータ"></iframe>
   </div>
-  <iframe id="co-frame" title="納得率シミュレータ"></iframe>
 </div>
 
 <!-- ★対象範囲の棟数（#head-stat）は 2026-08-24 に上帯の右端から下帯の左端へ移した（本人指示）。
@@ -3428,6 +3456,10 @@ window.IndexEmbed = {
     CO.open();
   });
   document.getElementById("co-close").addEventListener("click", () => CO.close());
+  // 板の外（暗い部分）を押したら閉じる。板の中のクリックでは閉じない
+  document.getElementById("consent-overlay").addEventListener("click", e => {
+    if (e.target.id === "consent-overlay") CO.close();
+  });
   document.addEventListener("keydown", e => {
     if (e.key === "Escape" && document.getElementById("consent-overlay").classList.contains("open")) CO.close();
   });
