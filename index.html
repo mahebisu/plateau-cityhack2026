@@ -176,6 +176,16 @@
     border: 1px solid var(--line); border-radius: 3px;
     padding: 0 4px; margin-right: 5px; white-space: nowrap;
   }
+  /* ★2026-08-25 本人指示：説明充足率の既定を「2/3を満たす最低限の説明」にした。
+     目標を選ぶ行＋最低限セットのバッジ。右帯の高さに効くので行は1段に詰める。 */
+  .fq-head { display: flex; align-items: center; gap: 8px; }
+  #recipe-row { gap: 3px; margin-left: auto; }
+  #recipe-row button { font-size: 10.5px; padding: 2px 6px; font-weight: 400; }
+  #recipe-msg b { color: var(--ink); }
+  .faq-row .min-badge {
+    display: inline-block; font-size: 9.5px; color: #fff; background: var(--accent);
+    border-radius: 3px; padding: 0 4px; margin-right: 5px; white-space: nowrap;
+  }
   .gauge-title { font-size: 13px; font-weight: 700; }
   #gauge-value { font-size: 26px; font-weight: 700; margin: 2px 0 7px; }
   #gauge-value .starmark { color: var(--accent); font-size: 15px; margin-right: 4px; }
@@ -611,8 +621,19 @@
       </div>
 
       <div id="faq-wrap">
-        <div class="section-title">準備する想定回答</div>
-        <div class="note" style="margin:-2px 0 6px;">配る資料で答える論点にチェック。入れた分だけ上の充足率が上がります。</div>
+        <!-- ★2026-08-25 本人指示：既定を「2/3を満たす最低限の説明」にした。
+             目標のボタンは見出しと同じ行に置く（右帯の高さは既に一杯で、1行も増やせない）。 -->
+        <div class="section-title fq-head">
+          <span>準備する想定回答</span>
+          <span class="btn-group" id="recipe-row">
+            <button type="button" data-target="t23" title="説明充足率が 2/3 に届く、いちばん少ない論点の組み合わせを総当たりで解きます（既定）">2/3</button>
+            <button type="button" data-target="t34" title="説明充足率が 3/4 に届く最小の組み合わせ">3/4</button>
+            <button type="button" data-target="t45" title="説明充足率が 4/5 に届く最小の組み合わせ">4/5</button>
+            <button type="button" data-target="all" title="説明対象の全棟で未回答の論点が無くなる組み合わせ">100%</button>
+            <button type="button" data-target="std" title="標準的な用途地域変更の説明会資料が答えている論点（制度の説明）だけの状態。ここから積み上げると初期値 0.0% になります">標準</button>
+          </span>
+        </div>
+        <div id="recipe-msg" class="note" style="margin:-4px 0 4px;line-height:1.35;"></div>
         <div id="faq-list"></div>
       </div>
 
@@ -1285,6 +1306,8 @@ async function boot() {
   renderAggregate();
   renderFaq();
   renderGauge();
+  renderRecipeMsg(null);
+  syncRecipeButtons();
   refreshPanel();
   loading.style.display = "none";
 }
@@ -1474,7 +1497,7 @@ function showPopup(feature) {
       (p.bcr_spec != null && p.bcr_spec !== "" ? fmt(p.bcr_spec, 0) + "%" : "—")],
     ["許容延床（概算）", p.cap_now != null && p.cap_now !== "" ? fmt(p.cap_now, 0) + " m²" : "—"],
     ["容積消化率", p.used_ratio != null && p.used_ratio !== "" ? fmt(p.used_ratio, 2) : "—"],
-    ["用途コード", p.usage || "—"],
+    ["用途", p.usage ? (USAGE_NAME[String(p.usage)] || "—") + "（" + p.usage + "）" : "—"],
     ["耐火構造区分", p.fireproof || "—"],
     ["大宮駅／新都心駅からの距離", fmt(p.dist, 0) + " m ／ " + fmt(p.dist_ss, 0) + " m"]
   ];
@@ -2228,6 +2251,73 @@ function bandGeoJSON() {
   };
 }
 
+/* ---- t4「事業を続けられるか」＝用途上の制限 ----------------------------
+   線を後退させて第二種住居地域になった棟が、その用途のまま建てられるかを数える。
+   根拠＝建築基準法 別表第二（へ）項（第二種住居地域に建ててはならない建築物）。
+   ⚠ PLATEAUの bldg:usage は17分類しかなく、作業場の床面積・倉庫業を営むか
+     までは分からない。よって3段に分けて出す：
+       ① 明らかに不可 … 10,000㎡超の店舗（uro:totalFloorArea で機械判定できる）
+       ② 要確認       … 工場・運輸倉庫施設・作業所併用住宅（規模／業態で決まる）
+       ③ 判定不能     … usage=461（不明）
+   ★数えられることは実測済み：bldg:usage は対象25,467棟の100%に入っている。 */
+const USAGE_NAME = {
+  "401": "業務施設", "402": "商業施設", "403": "宿泊施設", "404": "商業系複合施設",
+  "411": "住宅", "412": "共同住宅", "413": "店舗等併用住宅", "414": "店舗等併用共同住宅",
+  "415": "作業所併用住宅", "421": "官公庁施設", "422": "文教厚生施設",
+  "431": "運輸倉庫施設", "441": "工場", "451": "農林漁業用施設",
+  "452": "供給処理施設", "453": "防衛施設", "454": "その他", "461": "不明"
+};
+const USAGE_CHECK = { "441": "工場", "431": "運輸倉庫施設", "415": "作業所併用住宅" };
+const BIG_SHOP_M2 = 10000;   // 別表第二（へ）項：床面積の合計が1万㎡を超える店舗等
+
+function usageFit(props) {
+  const u = String(props.usage == null ? "" : props.usage);
+  const tfa = Number(props.tfa) || 0;
+  if ((u === "402" || u === "404") && tfa > BIG_SHOP_M2) return { kind: "ng", label: "10,000㎡超の店舗" };
+  if (USAGE_CHECK[u]) return { kind: "check", label: USAGE_CHECK[u] };
+  if (u === "461" || u === "") return { kind: "unknown", label: "不明" };
+  return { kind: "ok", label: USAGE_NAME[u] || u };
+}
+
+/* 後退側／拡大側それぞれの内訳を数える。渡すのは classify() で拾った棟の properties */
+function usageTally(propsList) {
+  const t = { ng: 0, check: 0, unknown: 0, byCheck: {} };
+  propsList.forEach(p => {
+    const r = usageFit(p);
+    if (r.kind === "ng") t.ng++;
+    else if (r.kind === "check") { t.check++; t.byCheck[r.label] = (t.byCheck[r.label] || 0) + 1; }
+    else if (r.kind === "unknown") t.unknown++;
+  });
+  return t;
+}
+
+function checkBreakdown(by) {
+  const ks = Object.keys(by);
+  return ks.length ? "（" + ks.map(k => k + " " + by[k]).join("・") + "）" : "";
+}
+
+/* 後退側＝第二種住居地域になる棟。t4「事業を続けられるか」の答えをそのまま出す */
+function usageRowsRetreat(propsList) {
+  const t = usageTally(propsList);
+  let h = kv('<b>用途上、建てられなくなる棟</b>',
+             '<b style="color:' + (t.ng ? COLOR_OVER : "#2e7d4f") + '">' + t.ng + " 棟</b>"
+             + (t.ng ? "（10,000㎡超の店舗）" : "（第二種住居地域で不可の用途は該当なし）"));
+  if (t.check) h += kv("うち規模・業態の確認が要る棟", t.check + " 棟" + checkBreakdown(t.byCheck));
+  if (t.unknown) h += kv("用途が不明で判定できない棟", t.unknown + " 棟（bldg:usage = 461）");
+  return h;
+}
+
+/* 拡大側＝商業地域になる棟。住居側で制限がかかっていた用途が外れる */
+function usageRowsExpand(propsList) {
+  const t = usageTally(propsList);
+  const n = t.ng + t.check;
+  const inner = Object.keys(t.byCheck).map(k => k + " " + t.byCheck[k]).join("・")
+              + (t.ng ? (Object.keys(t.byCheck).length ? "・" : "") + "10,000㎡超の店舗 " + t.ng : "");
+  return kv("用途上の制限が外れる棟",
+            n + " 棟" + (n ? "（" + inner + "＝第二種住居地域では制限がかかる用途）"
+                           : "（もともと制限のかかる用途の棟がありません）"));
+}
+
 function renderLineStats() {
   const el = document.getElementById("line-stats");
   if (offsetM === 0) {
@@ -2237,10 +2327,12 @@ function renderLineStats() {
   let crossed = 0, over = 0, freedTall = 0, freedCeil = 0, growReady = 0, addFloor = 0, exMax = 0;
   const overGrp = new Set(), crossGrp = new Set(), kGrp = new Set();
   const exList = [];
+  const crossedProps = [];              // ★t4：用途上の制限を数えるために貯める
   lineTargets.forEach(t => {
     const st = classify(t); if (!st) return;
     const p = t.p, h = Number(p.h);
     crossed++;
+    crossedProps.push(p);
     // grp（複合体キー）は延床・建築面積が無い棟には付かない（実測8.3%）。
     // それを落とすと複合体数を過小に数えるので、無い棟は自分自身を1複合体とする。
     const gk = p.grp || p.id;
@@ -2279,7 +2371,8 @@ function renderLineStats() {
       kv('<b>高さ20mの上限を超える棟</b>',
          '<b style="color:' + COLOR_OVER + '">' + over.toLocaleString() + " 棟</b>（複合体 " + overGrp.size + "）") +
       kv("超える高さ", over ? exMed.toFixed(1) + " m（中央値）／最大 " + exMax.toFixed(1) + " m" : "—") +
-      kv("許容延床の倍率", (RATIO_B / RATIO_A).toFixed(2) + " 倍");
+      kv("許容延床の倍率", (RATIO_B / RATIO_A).toFixed(2) + " 倍") +
+      usageRowsRetreat(crossedProps);
   } else {
     html +=
       kv("線を越えた棟", crossed.toLocaleString() + " 棟（複合体 " + crossGrp.size + "）") +
@@ -2288,11 +2381,15 @@ function renderLineStats() {
          freedTall ? freedTall.toLocaleString() + " 棟（既存不適格でなくなる）"
                    : "0 棟（この範囲では、天井を現に超えている棟はありません）") +
       kv("許容延床の倍率", (RATIO_A / RATIO_B).toFixed(2) + " 倍") +
-      kv("（参考）すぐ伸ばせる棟", growReady.toLocaleString() + " 棟 ／ " + Math.round(addFloor).toLocaleString() + " m²");
+      kv("（参考）すぐ伸ばせる棟", growReady.toLocaleString() + " 棟 ／ " + Math.round(addFloor).toLocaleString() + " m²") +
+      usageRowsExpand(crossedProps);
   }
   html += '<div class="note" style="margin-top:8px;">' +
     '既存不適格の判定は<b>高度地区（20ｍ地区）の絶対高さ</b>と実測の建物高さの比較。' +
     '敷地面積を使わないので推定を含まない。' +
+    '<br><b>用途上の制限</b>は建築基準法 <b>別表第二（へ）項</b>（第二種住居地域）。'+
+    'PLATEAUの <code>bldg:usage</code> は17分類で<b>作業場の床面積・倉庫業を営むかまでは分からない</b>ため、'+
+    '機械で判定できるのは<b>10,000㎡超の店舗</b>だけ。工場・運輸倉庫施設・作業所併用住宅は<b>要確認</b>として別に数えている。' +
     '<br>許容延床の倍率は 容積率÷建蔽率 の比（400/80 ÷ 200/60）。建築面積が約分で消えるため敷地面積を必要としない。' +
     '</div>';
   el.innerHTML = html;
@@ -2501,6 +2598,7 @@ function enableLineDrag() {
     if (grabEl) grabEl.parentElement.style.cursor = "grab";
     if (offsetM === 0) restoreColorModeAfterLine();
     computeAggregate();      // ドラッグ中は重いので、手を離したときだけ計算する
+    applyRecipeIfAuto();
     renderAggregate();
     renderGauge();
     refreshUnsatisfied();
@@ -2516,6 +2614,14 @@ function syncPresetButtons() {
 
 document.getElementById("shincho-btn").addEventListener("click", () => toggleShincho(!shinchoOn));
 
+/* ★目標のボタン（2/3・3/4・4/5・100%・標準資料のみ）。押すと自動の解き直しを再開する */
+document.querySelectorAll("#recipe-row button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    faqTouched = false;
+    applyRecipe(btn.dataset.target, true);
+  });
+});
+
 document.querySelectorAll("#preset button").forEach(btn => {
   btn.addEventListener("click", () => {
     offsetM = Number(btn.dataset.offset);
@@ -2524,6 +2630,7 @@ document.querySelectorAll("#preset button").forEach(btn => {
     syncPresetButtons();
     lineSourceRefresh();
     computeAggregate();
+    applyRecipeIfAuto();
     renderAggregate();
     renderGauge();
     refreshUnsatisfied();
@@ -2941,14 +3048,14 @@ function renderAggregate() {
    ========================================================================= */
 
 const TOPICS = [
-  { id: "t1", text: "用途地域の変更とは何か（法律上どう変わるのか）",           from: "全員" },
-  { id: "t2", text: "土地・建物の資産価値は上がるのか／下がるのか",             from: "全員" },
-  { id: "t3", text: "建て替えたとき、同じ規模の建物を建てられるのか",           from: "当事者" },
-  { id: "t4", text: "いま行っている事業は続けられるのか（用途の制限）",         from: "当事者" },
-  { id: "t5", text: "住宅地として住みやすくなるのか",                           from: "後退のとき" },
-  { id: "t6", text: "商業地として商売が成り立つのか（治安は悪くならないか）",   from: "拡大のとき" },
-  { id: "t7", text: "日当たりはどれくらい変わるのか",                           from: "近隣イ（日影）" },
-  { id: "t8", text: "建て替えなくても、直後から変わることはあるのか",           from: "当事者" }
+  { id: "t1", text: "用途地域の変更とは何か（法律上どう変わるのか）",           from: "全員",         short: "制度の説明" },
+  { id: "t2", text: "土地・建物の資産価値は上がるのか／下がるのか",             from: "全員",         short: "資産価値" },
+  { id: "t3", text: "建て替えたとき、同じ規模の建物を建てられるのか",           from: "当事者",       short: "同じ規模を建てられるか" },
+  { id: "t4", text: "いま行っている事業は続けられるのか（用途の制限）",         from: "当事者",       short: "事業を続けられるか" },
+  { id: "t5", text: "住宅地として住みやすくなるのか",                           from: "後退のとき",   short: "住宅地として" },
+  { id: "t6", text: "商業地として商売が成り立つのか（治安は悪くならないか）",   from: "拡大のとき",   short: "商業地として" },
+  { id: "t7", text: "日当たりはどれくらい変わるのか",                           from: "近隣イ（日影）", short: "日当たり" },
+  { id: "t8", text: "建て替えなくても、直後から変わることはあるのか",           from: "当事者",       short: "直後から変わること" }
 ];
 /* 初期値＝「標準的な用途地域変更の説明会資料が既に答えている論点」だけを回答済みにする。
    実務の標準資料に載るのは、変更の理由・変更前後の用途地域と容積率建蔽率・区域図・スケジュール。
@@ -2998,16 +3105,143 @@ function satisfaction() {
   return { ok: ok, total: total };
 }
 
+
+/* =========================================================================
+   ★説明の「最低限セット」を逆算する（2026-08-25 本人指示）
+   これまでのUX＝標準資料が答えている論点（t1）だけの状態から始め、
+   チェックを足して充足率を上げる（初期 0.0%）。
+   新しいUX＝「2/3を満たすには、最低限どの説明が要るか」を先に解いて既定にし、
+   そこから足し引きして調整する。
+
+   ★推定は1つも入っていない。上の説明充足率とまったく同じ式を、
+     論点の組み合わせ全通り（実際に効くのは最大7つ＝128通り）に当てているだけ。
+   ★同じ棟数で足りるなら論点の少ない方を採る。同数なら TOPICS の並び順で早い方。
+   ========================================================================= */
+const RECIPE_TARGETS = [
+  { id: "t23", label: "2/3",  ratio: 2 / 3 },
+  { id: "t34", label: "3/4",  ratio: 3 / 4 },
+  { id: "t45", label: "4/5",  ratio: 4 / 5 },
+  { id: "all", label: "100%", ratio: 1 }
+];
+let recipeTarget = "t23";     // ★既定＝2/3
+let faqTouched   = false;     // 手で行を触ったら、以後この自動適用をやめる
+let recipeSet    = null;      // 直近に解いた最低限セット（行のバッジに使う）
+
+/* いま実際に効いている論点（説明対象の棟が1つでも持っている論点）だけを候補にする。
+   t5とt6は線を動かす向きで排他なので、ここで自動的に片方だけになる。 */
+function activeTopicIds() {
+  const s = new Set();
+  if (aggCache && aggCache.topics) aggCache.topics.forEach(set => set.forEach(t => s.add(t)));
+  return TOPICS.map(t => t.id).filter(id => s.has(id));
+}
+
+/* 論点集合 set に答えたときに「未回答の論点を1つも持たない棟」が何棟になるか */
+function okCountWith(set) {
+  if (!aggCache || !aggCache.topics) return 0;
+  let ok = 0;
+  aggCache.topics.forEach(ts => {
+    let all = true;
+    ts.forEach(t => { if (!set.has(t)) all = false; });
+    if (all) ok++;
+  });
+  return ok;
+}
+
+function minimalSetFor(ratio) {
+  if (!aggCache || !aggCache.topics || aggCache.topics.size === 0) return null;
+  const ids = activeTopicIds(), n = ids.length;
+  const total = aggCache.topics.size;
+  const need = Math.ceil(ratio * total - 1e-9);
+  let best = null;
+  for (let mask = 0; mask < (1 << n); mask++) {
+    let cnt = 0;
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) cnt++;
+    if (best && cnt >= best.ids.length) continue;   // 既に同数以下の解がある
+    const set = new Set();
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) set.add(ids[i]);
+    const ok = okCountWith(set);
+    if (ok < need) continue;
+    best = { ids: ids.filter(id => set.has(id)), ok: ok, total: total, need: need };
+  }
+  return best;   // null ＝ 全部答えても届かない
+}
+
+/* 目標を適用する。targetId === "std" は「標準資料のみ」（t1だけ・従来の初期状態） */
+function applyRecipe(targetId, doRender) {
+  recipeTarget = targetId;
+  let best = null;
+  if (targetId === "std") {
+    recipeSet = null;
+    Object.keys(answered).forEach(k => { answered[k] = (k === "t1"); });
+  } else {
+    const t = RECIPE_TARGETS.find(x => x.id === targetId);
+    best = t ? minimalSetFor(t.ratio) : null;
+    recipeSet = best ? new Set(best.ids) : null;
+    if (best) Object.keys(answered).forEach(k => { answered[k] = recipeSet.has(k); });
+  }
+  renderRecipeMsg(best);
+  syncRecipeButtons();
+  if (doRender !== false) { renderFaq(); renderGauge(); refreshUnsatisfied(); }
+  else renderFaq();
+}
+
+/* 線を動かして説明対象が計算し直されたら、手で触っていない限り目標を解き直す */
+function applyRecipeIfAuto() {
+  if (faqTouched) { renderRecipeMsg(null); return; }
+  applyRecipe(recipeTarget, false);
+}
+
+function syncRecipeButtons() {
+  document.querySelectorAll("#recipe-row button").forEach(b => {
+    b.classList.toggle("active", !faqTouched && b.dataset.target === recipeTarget);
+  });
+}
+
+function renderRecipeMsg(best) {
+  const el = document.getElementById("recipe-msg");
+  if (!el) return;
+  if (!aggCache || !aggCache.topics || aggCache.topics.size === 0) {
+    el.innerHTML = "線を動かすと、目標を満たす最低限の説明を解きます。";
+    return;
+  }
+  if (faqTouched) {
+    el.innerHTML = "手で調整中。目標のボタンを押すと解き直します。";
+    return;
+  }
+  if (recipeTarget === "std") {
+    el.innerHTML = "標準的な説明会資料が答えている論点（制度の説明）だけの状態。";
+    return;
+  }
+  const t = RECIPE_TARGETS.find(x => x.id === recipeTarget);
+  if (!best) {
+    el.innerHTML = "<b>すべての論点に答えても " + (t ? t.label : "") + " に届きません。</b>";
+    return;
+  }
+  const act = activeTopicIds();
+  const names = best.ids.length === act.length
+    ? "この向きで効く論点の全部"                     // 全部要るときは並べない（3行に伸びるため）
+    : best.ids.map(id => {
+        const tp = TOPICS.find(x => x.id === id);
+        return tp ? tp.short : id;
+      }).join("／");
+  const pc = (best.ok / best.total * 100).toFixed(1);
+  el.innerHTML = t.label + "に必要な最低限は<b>" + best.ids.length + "つ</b>＝" + names +
+    "　→ <b>" + pc + "%</b>（" + best.ok + "/" + best.total + "棟）";
+}
+
 function renderFaq() {
   const list = document.getElementById("faq-list");
   list.innerHTML = "";
   TOPICS.forEach(t => {
     const row = document.createElement("div");
     row.className = "faq-row " + (answered[t.id] ? "answered" : "unanswered");
+    const badge = (recipeSet && recipeSet.has(t.id)) ? '<span class="min-badge">最低限</span>' : "";
     row.innerHTML = '<span class="box">' + (answered[t.id] ? "✓" : "") + "</span>" +
-      '<span><span class="txt-id">' + t.from + "</span>" + t.text + "</span>";
+      '<span>' + badge + '<span class="txt-id">' + t.from + "</span>" + t.text + "</span>";
     row.addEventListener("click", () => {
       answered[t.id] = !answered[t.id];
+      faqTouched = true;              // 以後、線を動かしても勝手に解き直さない
+      syncRecipeButtons(); renderRecipeMsg(null);
       renderFaq(); renderGauge(); refreshUnsatisfied();
     });
     list.appendChild(row);
@@ -3470,6 +3704,8 @@ window.IndexEmbed = {
       if (ans[k] != null && !!ans[k] !== !!answered[k]) { answered[k] = !!ans[k]; changed = true; }
     });
     if (!changed) return;
+    faqTouched = true;                 // 向こうで触った＝自動の解き直しをやめる
+    syncRecipeButtons(); renderRecipeMsg(null);
     renderFaq(); renderGauge(); refreshUnsatisfied();
     CO.ctx();
   }
