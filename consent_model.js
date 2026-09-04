@@ -160,8 +160,8 @@ const VOICE = { classroom: 0.40, podium: 0.60, smallgroup: 0.90 };
 
 /* 層ごとの「不利益に直結する論点」。
    ★t1（制度の説明）は不利益の大きさではなく理解度なので、ここには入れず U に足している。
-   ★t5／t6 は排他。ブラウザ用のコホート（consent_cohort.json）は -30/-60/-100 の
-     すべてが「後退」なので t5 を使う。拡大の設計を扱うときは t6 に読み替える。 */
+   ★t5／t6 は排他。ここは後退側（t5）で書いてある。拡大側のコホート（offsetM>0・2026-09-05）は
+     buildCohort が r.lossTopics に t6 へ読み替えた配列を持たせ、estimate はそちらを優先する。 */
 const LOSS_TOPICS = {
   subject: ["t3", "t4", "t8"],   // 用途地域そのものが変わる棟＝規模・事業・直後の費用
   kinA:    ["t2", "t5"],         // 至近＝資産価値と環境の変化
@@ -176,12 +176,14 @@ function buildCohort(offsetM) {
   if (!IS_NODE) throw new Error("buildCohort は node 専用（ブラウザは consent_cohort.json を読む）");
   V.setOffset(offsetM);
   const subjects = [];
+  const expand = offsetM > 0;
   V.lineTargets.forEach(t => {
     const st = V.classify(t); if (!st) return;
     if (offsetM < 0) { if (st.state === "over") subjects.push({ f: t.f, h: Number(t.p.h), cap: t.cap }); }
-    else if (st.state === "freed" && t.cap != null && Number(t.p.h) > t.cap) {
-      subjects.push({ f: t.f, h: Number(t.p.h), cap: t.cap });
-    }
+    /* ★2026-09-05 拡大側：当事者＝線を越えて用途地域そのものが変わる棟（freed）。
+       旧条件 `h > t.cap` は「いま20mを超えているか」＝後退側と同じ判定で構造的に空だった。
+       近隣住民ア（敷地境界15m）は高さに依らないので実測で立てる。イ（高さ2倍・日影）は数えない＝下限。 */
+    else if (expand && st.state === "freed") subjects.push({ f: t.f, h: Number(t.p.h), cap: t.cap, freed: true });
   });
   const key = f => f.properties.grp || f.properties.id;
   const rec = new Map();  // 複合体キー -> {layer, topics:Set, feats:[], dist, shHours, usage}
@@ -195,7 +197,7 @@ function buildCohort(offsetM) {
   const setLayer = (r, L) => { if (r.layer == null || rank[L] > rank[r.layer]) r.layer = L; };
 
   subjects.forEach(sj => {
-    const j = V.computeJourei(sj.f, sj.h);
+    const j = V.computeJourei(sj.f, sj.h, expand ? { noHeight: true } : null);
     const ring = V.outerRing(sj.f.geometry);
     const add = (f, L) => {
       const r = touch(key(f), f);
@@ -214,7 +216,7 @@ function buildCohort(offsetM) {
     const r = touch(key(sj.f), sj.f);
     setLayer(r, "subject");
     V.topicsFor("subject").forEach(t => r.topics.add(t));
-    r.dist = 0; r.nonconform = true; r.h = sj.h; r.cap = sj.cap;
+    r.dist = 0; r.nonconform = !expand; r.freed = !!expand; r.h = sj.h; r.cap = sj.cap;
   });
 
   rec.forEach(r => {
@@ -223,6 +225,15 @@ function buildCohort(offsetM) {
     r.rep = rep;
     r.usage = Number(rep.properties.usage);
     r.hMax = Number(rep.properties.h);
+    /* ★拡大側（2026-09-05）：損失の置き方に新しい係数を作らない。
+       当事者のうち住宅系用途（411 住宅／412 共同住宅／413 店舗等併用住宅／414 店舗等併用共同住宅／415 作業所併用住宅）は
+       容積の恩恵より先に「隣が高層化する」側＝周辺住民の損失 lossShuu を流用。
+       非住宅の当事者は天井が外れる＝利益なので損失 0（利益の係数は作らない）。
+       環境の論点は t5→t6 に読み替える（LOSS_TOPICS は後退側の t5 で書いてある）。 */
+    if (expand) {
+      r.resi = [411, 412, 413, 414, 415].indexOf(r.usage) >= 0;
+      r.lossTopics = (LOSS_TOPICS[r.layer] || []).map(t => t === "t5" ? "t6" : t);
+    }
     /* 持ち家か賃貸かは、用途別の持ち家率から決定的に割り当てる
        （毎回ぶれると数字が信用されないので、IDのハッシュで固定する） */
     const p = OWNER_P[r.usage] != null ? OWNER_P[r.usage] : 0.756;
@@ -306,12 +317,13 @@ function estimate(cohort, plan, co) {
 
     // 分配的公正：層と実データ（日影の時刻数・距離）から損失を出す
     let loss = 0;
-    if (r.layer === "subject") loss = co.lossNonconform;
+    if (r.freed) loss = r.resi ? co.lossShuu : 0;          // ★拡大側の当事者（2026-09-05）
+    else if (r.layer === "subject") loss = co.lossNonconform;
     else if (r.layer === "kinA") loss = co.lossKinA * (1 - Math.min(1, r.dist / 50));
     else if (r.layer === "kinB") loss = co.lossKinB0 + co.lossKinBhour * (r.shHours / 7);
     else loss = co.lossShuu;
     /* ★その層の「不利益に直結する論点」が未回答だと、不利益が過大に見積もられる */
-    const lt = LOSS_TOPICS[r.layer] || [];
+    const lt = r.lossTopics || LOSS_TOPICS[r.layer] || [];
     let un = 0; lt.forEach(t => { if (!ans[t]) un++; });
     loss *= 1 + co.lossAmp * (lt.length ? un / lt.length : 0);
     const tenure = r.owner ? 1.0 : co.tenureRent;

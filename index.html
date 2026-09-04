@@ -131,6 +131,7 @@
   #kgi .barlab { display: flex; justify-content: space-between; font-size: 9.5px; color: #c8f8ff; margin-top: 2px; }
   #kgi .barlab .t23 { color: #c8f8ff; font-weight: 700; }
   #kgi .gap { font-size: 10.5px; color: #ffe4e0; margin-top: 1px; white-space: nowrap; }
+  #kgi .gap.hint { font-size: 9.5px; color: #c8f8ff; opacity: .9; }
   #kgi .krow { display: flex; align-items: center; gap: 12px; margin-top: 3px; }
   #kgi .kv2 { display: flex; flex-direction: column; line-height: 1.1; }
   #kgi .kv2 .v { font-size: 18px; font-weight: 700; color: #ffe4e0; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -863,6 +864,7 @@
             <div class="track"><div class="fill" id="kgi-fill" style="width:0%"></div><div class="tgt" style="left:66.7%"></div></div>
             <div class="barlab"><span>0</span><span class="t23">2/3＝法令の最低条件</span><span>100%</span></div>
             <div class="gap" id="kgi-gap">—</div>
+            <div class="gap hint">残りは説明会の設計で届く → 説明計画詳細</div>
           </div>
         </div>
         <div class="krow">
@@ -917,6 +919,7 @@
           <button type="button" data-m="kairan" title="市報＋HP＋SNS＋自治会の回覧板">＋回覧板</button>
           <button type="button" data-m="kobetsu" title="上に加えて個別通知を投函（近隣・周辺の全戸）">＋個別通知</button>
         </div>
+        <div class="note tight" id="reach-note" style="display:none;font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="拡大側の説明対象は当事者と近隣住民ア（条例第9条1項＝個別に説明義務）だけで、媒体依存の周辺住民が立たない。だから到達率は100%で、周知の手段を変えても動かない">当事者・近隣アのみ＝到達率100%。周知の手段は効かない</div>
       </div>
 
       <div id="line-result">
@@ -3230,7 +3233,7 @@ let subject = null;
    近隣住民イ ＝ 外壁から高さの2倍以内 かつ 冬至日の日影
                  ★ただし商業地域・工業専用地域にあるものを除く
    周辺住民   ＝ 近隣住民以外で、15m以内 または 日影の範囲 または 高さの2倍以内 */
-function computeJourei(subjFeat, hUse) {
+function computeJourei(subjFeat, hUse, opts) {
   const ring = outerRing(subjFeat.geometry);
   const c = centroidOf(subjFeat);
   // ★敷地境界線は建物の外周を t だけ外へ膨らませた輪郭とみなす（siteOffsetOf 参照）。
@@ -3240,8 +3243,12 @@ function computeJourei(subjFeat, hUse) {
   const zoneFn = subjFeat.properties.zone_now;
   const plane = shadowPlane(zoneFn);
   const shadows = [];
-  SUN_SOLSTICE.forEach(sn => { const r = shadowRing(ring, hUse, plane, sn); if (r) shadows.push({ h: sn.h, ring: r }); });
-  const reach2h = hUse * 2;
+  /* ★noHeight（2026-09-05・拡大側）：建て替え後の高さが決まっていない棟を「将来の中高層の敷地」と
+     みなすとき、高さが要る条件（高さの2倍・冬至日の日影＝近隣住民イ）を捨て、
+     高さに依らない条件（敷地境界線から15m）だけで数える。影は作らず reach2h は 0。 */
+  const noHeight = !!(opts && opts.noHeight);
+  if (!noHeight) SUN_SOLSTICE.forEach(sn => { const r = shadowRing(ring, hUse, plane, sn); if (r) shadows.push({ h: sn.h, ring: r }); });
+  const reach2h = noHeight ? 0 : hUse * 2;
 
   const kinA = [], kinB = [], shuu = [];
   buildings.features.forEach(f => {
@@ -3367,7 +3374,7 @@ let aggCache = null;
 function computeAggregate() {
   if (offsetM === 0) { aggCache = null; return; }
   const subjects = [];      // 後退側：中高層条例の当事者（15m・高さの2倍・冬至日の日影が引ける）
-  const crossers = [];      // 拡大側：用途地域そのものが変わる当事者（条例の層は引けない）
+  const crossers = [];      // 拡大側：用途地域そのものが変わる当事者（近隣アは高さに依らず立てる・2026-09-05）
   lineTargets.forEach(t => {
     const st = classify(t); if (!st) return;
     if (offsetM < 0) {
@@ -3415,16 +3422,25 @@ function computeAggregate() {
      ★近隣住民ア・イ・周辺住民は立てない。あれは「外壁から高さの2倍」「冬至日の日影」を要求し、
      まだ建っていない建物の高さが要るため（＝推定になる）。だから分母の意味が両側で違う。
      後退側＝中高層条例の説明対象／拡大側＝用途地域変更の当事者。パネルに明記している。 */
+  /* ★2026-09-05（本人指摘「拡大のシミュレーションができていないのと同じ」）：
+     条例の3条件のうち高さが要るのは「イ（高さの2倍・冬至日影）」だけ。
+     ア（敷地境界線から15m）は高さに依らないので、線を越えた各棟を「将来の中高層の敷地」とみなして
+     実測で数える（computeJourei の noHeight）。イは数えない＝下限。係数は1つも入らない。
+     → 拡大側の説明対象＝当事者（用途地域が変わる棟）＋近隣住民ア（＋大きな敷地の周辺住民）。 */
   crossers.forEach(cr => {
     const k = cr.f.properties.grp || cr.f.properties.id;
     all.add(k); addT(k, "subject", cr.f);
+    const j = computeJourei(cr.f, Number(cr.f.properties.h), { noHeight: true });
+    const key = f => f.properties.grp || f.properties.id;
+    j.kinA.forEach(f => { set1.add(key(f)); all.add(key(f)); addT(key(f), "kinA", f); });
+    j.shuu.forEach(f => { set3.add(key(f)); all.add(key(f)); addT(key(f), "shuu", f); });
   });
   /* ★層は重ならないように整理してから数える。
      1棟が、ある当事者にとっては近隣住民ア、別の当事者にとっては周辺住民、
      ということが起きる。そのまま set1/set2/set3 の大きさを足すと二重に数える
      （2026-08-23 発見。近隣125＋周辺214＝339 だが実際の合計は220棟だった）。
      条例上の義務は強い方が残るので、ア ＞ イ ＞ 周辺 の順に吸収させる。 */
-  const subjKeys = new Set(subjects.map(sj => sj.f.properties.grp || sj.f.properties.id));
+  const subjKeys = new Set(subjects.concat(crossers).map(sj => sj.f.properties.grp || sj.f.properties.id));
   const kinA = new Set(), kinB = new Set(), shuu = new Set();
   set1.forEach(k => { if (!subjKeys.has(k)) kinA.add(k); });
   set2.forEach(k => { if (!subjKeys.has(k) && !kinA.has(k)) kinB.add(k); });
@@ -3442,7 +3458,7 @@ function computeAggregate() {
       g.add(k);
       if (t.capNow != null) cg.add(k);
     });
-    aggCache.expand = { n: nf, grp: g.size, capGone: cg.size, subj: aggCache.topics.size };
+    aggCache.expand = { n: nf, grp: g.size, capGone: cg.size, subj: g.size };
   }
 }
 
@@ -3455,16 +3471,17 @@ function renderAggregate() {
   const a = aggCache;
   if (a.expand) {
     /* ★拡大側。0を並べると「計算していない」ように見えるので、言えることと言えない理由を出す。 */
+    /* ★2026-09-05：拡大側にも層を立てた（当事者＋近隣ア。イは高さが要るので数えない＝下限）。
+       棟数と「天井が外れる」は真上の「線を動かした結果」に出ているので、ここには出さない。 */
     el.innerHTML =
-      /* ★棟数と「天井が外れる」は真上の「線を動かした結果」に出ている。ここには出さない
-         （2026-09-04 本人指摘。同じ数字が右帯に二度出ていた）。 */
       tiles(
-        tile(a.expand.subj.toLocaleString() + "<small>複合体</small>", '<span class="who wS"></span>用途地域が変わる当事者＝説明対象', "wide") +
-        tile("—", '<span class="who wA"></span>近隣住民ア・イ（条例）', "dim") +
-        tile("—", '<span class="who wC"></span>周辺住民（条例）', "dim")) +
-      '<div class="note tight"><b>近隣・周辺は出せない</b>：条例の説明義務は個々の建築計画に紐づく。'
-      + '拡大側は建て替え後の高さが決まっていないため「高さの2倍」も「冬至日の日影」も引けない（引けば推定になる）。'
-      + '当事者は全員が同じ6つの疑問を持つので、説明充足率は<b>0%か100%</b>のどちらか。</div>';
+        tile(a.all.toLocaleString() + "<small>棟</small>", "<b>潜在的な説明対象の合計</b>（当事者含む・重複除く・<b>下限</b>）", "wide hi") +
+        tile(a.expand.subj.toLocaleString() + "<small>複合体</small>", '<span class="who wS"></span>当事者（用途地域が変わる棟）') +
+        tile('<span style="color:#b8262c">' + a.r1.toLocaleString() + '</span><small>棟</small>', '<span class="who wA"></span>近隣住民ア（敷地境界15m・高さに依らない）') +
+        tile("—", '<span class="who wB"></span>近隣住民イ（高さ2倍・日影＝建て替え後の高さが要る）', "dim") +
+        tile('<span style="color:#2b6cb0">' + a.r3.toLocaleString() + '</span><small>棟</small>', '<span class="who wC"></span>周辺住民（敷地境界15m・外壁50m超）', "wide")) +
+      '<div class="note tight"><b>下限</b>：線を越えた各棟を「将来の中高層の敷地」とみなし、条例の条件のうち<b>高さに依らないもの</b>だけで数えた。'
+      + '「高さの2倍」「冬至日の日影」は建て替え後の高さが要るので含めていない（含めれば推定になる）。</div>';
     return;
   }
   el.innerHTML =
@@ -3684,7 +3701,9 @@ function renderFaq() {
       : Array.from(aggCache.topics.values()).some(set => set.has(t.id));
     /* 拡大側は当事者だけが立つので、生じないのは t5（住宅地として）と t7（日当たり）の2つ。
        t7 が出ないのは、まだ建っていない建物の日影は引けないため。 */
-    const bulk = !!(aggCache && aggCache.topics && aggCache.topics.size === 0);
+    /* ★拡大側（offsetM>0）は t5・t7 の2行が淡色になる。行内に注記を出すと2行に折り返して右帯が溢れるので、
+       拡大側は title だけに持たせる（2026-09-05）。 */
+    const bulk = !!(aggCache && aggCache.topics && aggCache.topics.size === 0) || offsetM > 0;
     if (!live) row.classList.add("inactive");
     row.title = "誰に生じる論点か：" + t.from;
     row.innerHTML = '<span class="box">' + (answered[t.id] ? "✓" : "") + "</span>" +
@@ -3713,9 +3732,7 @@ function renderGauge() {
        拡大側は説明対象が機械的に決められない（＝分母0）ので、率そのものが定義できない。
        ここで「線を動かすと計算します」と出すと、動かしているのに嘘になる（2026-09-04 修正）。 */
     th.innerHTML = (aggCache && aggCache.expand)
-      ? '<div class="th-row"><span class="lbl">拡大側は分母が立ちません</span></div>'
-        + '<div class="th-row"><span class="lbl" style="font-weight:400">説明対象になった棟が0のため、'
-        + '「未回答の論点を1つも持たない棟 ÷ 説明対象」が計算できません</span></div>'
+      ? '<div class="th-row"><span class="lbl">この位置では線を越える棟がありません</span></div>'
       : '<div class="th-row"><span class="lbl">線を動かすと計算します</span></div>';
     renderKGI();
     return;
@@ -4157,8 +4174,12 @@ function kgiLoad() {
 
 function kgiNearest(off) {
   let best = null, bd = Infinity;
-  Object.keys(kgiData).map(Number).forEach(k => { const d = Math.abs(k - off); if (d < bd) { bd = d; best = k; } });
-  return { key: String(best), diff: Math.round(Math.abs(best - off)) };
+  /* ★同じ向き（符号）の断面からだけ選ぶ（2026-09-05：拡大側の断面 +10〜+150m を追加） */
+  Object.keys(kgiData).map(Number).forEach(k => {
+    if ((k < 0) !== (off < 0)) return;
+    const d = Math.abs(k - off); if (d < bd) { bd = d; best = k; }
+  });
+  return { key: String(best), diff: best == null ? 0 : Math.round(Math.abs(best - off)) };
 }
 
 function renderKGI() {
@@ -4171,25 +4192,26 @@ function renderKGI() {
                                     $("kgi-gap").textContent = dv == null ? "—"
                                       : (dv >= 2 / 3 ? "2/3 に到達（＋" + ((dv - 2 / 3) * 100).toFixed(1) + "）"
                                                      : "2/3 まで あと " + ((2 / 3 - dv) * 100).toFixed(1) + " ポイント"); };
-  if (offsetM === 0) { set("--", "--", "--", "--"); $("kgi-ctx").textContent = "線を動かすと推定します"; return; }
-  if (offsetM > 0) {
-    set("--", "--", "--", "--");
-    $("kgi-ctx").textContent = "商業を" + Math.round(offsetM) + "m拡大 ／ この向きの推定は作っていない（近隣・周辺の層が立たないため）";
-    return;
-  }
+  if (offsetM === 0) { set("--", "--", "--", "--"); $("kgi-ctx").textContent = "線を動かすと推定します"; const rn0 = $("reach-note"); if (rn0) rn0.style.display = "none"; return; }
+  /* ★2026-09-05：拡大側も推定する（コホート +10〜+150m・data/consent_cohort.json）。
+     早期 return は消した。断面が無ければ kgiNearest が同じ向きで最寄りを返す。 */
   if (kgiState !== "ready") {
     if (kgiState === "idle") kgiLoad();
     $("kgi-ctx").textContent = kgiState === "error" ? "推定モデルを読み込めません" : "推定モデルを読み込み中…";
     return;
   }
   const n = kgiNearest(offsetM), co = kgiData[n.key];
+  if (!co) { set("--", "--", "--", "--"); $("kgi-ctx").textContent = "この向きの断面がありません"; return; }
   const plan = Object.assign({}, kgiModel.BASE_PLAN, { media: KGI_MEDIA[kgiMedia], answered: Object.assign({}, answered) });
   const e = kgiModel.estimate(co, plan, kgiModel.CO);
   const pc = x => (x * 100).toFixed(1) + "%";
   set(pc(e.douiAll), pc(e.agree), pc(Math.max(0, e.agree - e.douiAll)), pc(e.reach), e.douiAll);
+  const rn = $("reach-note"); if (rn) rn.style.display = (offsetM > 0 && e.reach >= 0.9995) ? "" : "none";
   const s = satisfaction();
-  $("kgi-ctx").textContent = "商業を" + Math.round(-offsetM) + "m後退 ／ 説明対象 " + co.length + "棟"
-    + (n.diff > 0 ? " ／ 断面 " + (-Number(n.key)) + "m" : "");
+  $("kgi-ctx").textContent = (offsetM < 0
+      ? "商業を" + Math.round(-offsetM) + "m後退 ／ 説明対象 " + co.length + "棟"
+      : "商業を" + Math.round(offsetM) + "m拡大 ／ 潜在的な説明対象 " + co.length + "棟（下限）")
+    + (n.diff > 0 ? " ／ 断面 " + Math.abs(Number(n.key)) + "m" : "");
 }
 
 (function () {
@@ -4238,7 +4260,7 @@ const CO = {
     const s = satisfaction();
     const dir = offsetM < 0 ? "商業を" + Math.round(-offsetM) + "m後退"
               : offsetM > 0 ? "商業を" + Math.round(offsetM) + "m拡大" : "現行（動かしていない）";
-    const sat = s && s.total ? "説明対象 " + s.total + "棟 ／ 説明充足率 "
+    const sat = s && s.total ? (offsetM > 0 ? "潜在的な説明対象 " : "説明対象 ") + s.total + "棟" + (offsetM > 0 ? "（下限）" : "") + " ／ 説明充足率 "
                              + (s.ok / s.total * 100).toFixed(1) + "%（実測）" : "説明対象 0棟";
     document.getElementById("co-ctx").textContent = "地図から渡した状態：" + dir + " ／ " + sat;
   }

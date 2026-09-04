@@ -870,8 +870,9 @@ function renderConv(p) {
    ・index の用途地域境の位置（offsetM）を受け取り、いちばん近い断面に合わせる
    ・index の論点チェック（answered）を受け取り、変更したら index に返す
    ・index 側は画面を消さずに重ねるだけなので、戻ると直前の状態がそのまま残る
-   ⚠ 「拡大」側（offsetM ≧ 0）のコホートは無い。**説明対象が0棟になる**ため。
-      その場合は解かずに理由を出す。 ======================================= */
+   ★2026-09-05：「拡大」側（offsetM＞0）のコホートも読む（+10〜+150m）。
+      当事者＝線を越えた棟／近隣ア＝敷地境界15m（高さに依らない）／イは数えない＝下限。
+      offsetM＝0（現行）のときだけ理由を出す。 ======================================= */
 const EMBED = new URLSearchParams(location.search).get("embed") === "1";
 
 /* ★スマホ案内。index.html から iframe で開かれているときは出さない（親側が出している） */
@@ -897,8 +898,9 @@ let embedOffset = null, embedAnswered = null;
 function nearestKey(off) {
   const keys = Object.keys(DATA).map(Number).sort((a, b) => a - b);
   let best = null, bd = Infinity;
-  keys.forEach(k => { const d = Math.abs(k - off); if (d < bd) { bd = d; best = k; } });
-  return { key: String(best), diff: Math.round(Math.abs(best - off)) };
+  /* ★同じ向き（符号）の断面からだけ選ぶ（2026-09-05：拡大側の断面を追加） */
+  keys.forEach(k => { if ((k < 0) !== (off < 0)) return; const d = Math.abs(k - off); if (d < bd) { bd = d; best = k; } });
+  return { key: String(best), diff: best == null ? 0 : Math.round(Math.abs(best - off)) };
 }
 
 function applyEmbedOffset(off) {
@@ -906,11 +908,9 @@ function applyEmbedOffset(off) {
   const box = $("embed-note");
   box.style.display = "";
   document.querySelectorAll(".page .card").forEach(c => c.style.opacity = "");
-  if (!(off <= -5)) {
-    box.innerHTML = '<b style="color:var(--red)">この向きでは条例上の説明対象が発生しません（0棟）。</b> '
-      + '<span style="color:var(--sub)">商業側が広がる向き（拡大）では、高さの上限が外れるだけで'
-      + '既存不適格が1棟も生じないためです（実測：60m拡大で「現に20m超」0棟）。'
-      + '地図に戻って<b>商業を後退</b>させると、ここに数字が出ます。</span>';
+  if (Math.abs(off) < 5 || nearestKey(off).key === "null") {
+    box.innerHTML = '<b style="color:var(--red)">線が現行の位置にあります（説明対象 0棟）。</b> '
+      + '<span style="color:var(--sub)">地図に戻って用途地域境を動かすと、ここに数字が出ます。</span>';
     document.querySelectorAll(".page .card").forEach(c => {
       if (!c.contains(box)) c.style.opacity = "0.25";
     });
@@ -919,10 +919,11 @@ function applyEmbedOffset(off) {
   const n = nearestKey(off);
   const sameKey = (n.key === COHORT_KEY) && !!SOL;
   setCohort(n.key);
-  box.innerHTML = "地図から <b>商業を" + Math.round(-off) + "m後退</b> を受け取りました"
+  box.innerHTML = "地図から <b>商業を" + Math.round(Math.abs(off)) + (off < 0 ? "m後退" : "m拡大") + "</b> を受け取りました"
     + (n.diff > 0 ? '<span style="color:var(--sub)">（いちばん近い断面 '
         + Math.abs(Number(n.key)) + "m で計算しています。差 " + n.diff + "m）</span>" : "")
-    + '<span style="color:var(--sub)"> ／ 説明対象 ' + COHORT.length + "棟</span>";
+    + '<span style="color:var(--sub)"> ／ ' + (off < 0 ? "説明対象 " + COHORT.length + "棟"
+        : "潜在的な説明対象 " + COHORT.length + "棟（当事者＋近隣ア・イは高さが要るので含まず＝下限）") + "</span>";
   /* ★同じ断面なら解き直さない（表示の更新だけ） */
   if (sameKey) loadPlan(SOL.planAt); else solveAndLoad();
   /* ★solveAndLoad() は③に「解いた設計」を読み込む＝論点が全部チェック済みになる。
@@ -956,9 +957,11 @@ function pushAnsweredToParent() {
 
 fetch("data/consent_cohort.json").then(r => r.json()).then(d => {
   DATA = d;
-  const keys = Object.keys(DATA).map(Number).sort((a, b) => b - a);
+  /* 並び＝後退（-10…-120）→ 拡大（+10…+150）。既定は後退60m（台本の断面） */
+  const keys = Object.keys(DATA).map(Number).sort((a, b) => (a < 0) !== (b < 0) ? (a < 0 ? -1 : 1) : (a < 0 ? b - a : a - b));
   $("off").innerHTML = keys.map(k =>
-    '<option value="' + k + '"' + (k === -60 ? " selected" : "") + ">商業を" + (-k) + "m後退</option>").join("");
+    '<option value="' + k + '"' + (k === -60 ? " selected" : "") + ">商業を" + Math.abs(k)
+      + (k < 0 ? "m後退" : "m拡大（下限）") + "</option>").join("");
   if (EMBED) $("off").style.display = "none";
   setCohort($("off").value);
   solveAndLoad();
