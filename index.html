@@ -41,7 +41,7 @@
   header h1 small { font-weight: 400; color: var(--sub); font-size: 11.5px; margin-left: 7px; }
   /* 幅が足りない画面では副題を畳む（タイトル自体は残す） */
   @media (max-width: 1560px) { header h1 small { display: none; } }
-  /* ★対象範囲の棟数。2026-08-24 に上帯の右端から下帯の左端へ移した。押すと #area-modal が開く */
+  /* ★2026-09-04 #head-stat は廃止（下帯を「データの出所と前提」1つに集約）。CSSは残骸。 */
   #head-stat {
     flex: 0 0 auto; display: flex; align-items: baseline; gap: 4px;
     font-size: 11.5px; color: var(--sub); white-space: nowrap; cursor: pointer;
@@ -252,7 +252,9 @@
   #map-legend .legend-body { overflow-y: auto; padding: 8px 11px 10px; }
   #map-legend h4 { margin: 0 0 5px; font-size: 11.5px; font-weight: 700; }
   #map-legend h4:not(:first-child) { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
-  #map-legend .lg { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  /* ★色見本は説明文の1行目に合わせて上揃え（2026-09-04 本人指示）。2行以上に折り返す行で中央揃えだと見本が沈む */
+  #map-legend .lg { display: flex; align-items: flex-start; gap: 6px; margin: 2px 0; }
+  #map-legend .lg > .sw, #map-legend .lg > .ln { margin-top: .34em; }
   #map-legend .sw { width: 15px; height: 10px; border-radius: 2px; flex: 0 0 auto; border: 1px solid rgba(0,0,0,.12); }
   #map-legend .ln { width: 15px; height: 0; flex: 0 0 auto; border-top-width: 3px; border-top-style: solid; }
   /* 動かす線の見本（黒白黒白＋両端の球）。地図の描き方と揃える */
@@ -768,11 +770,12 @@
              「黄土の帯＝第二種住居地域に戻る範囲」「赤の帯＝商業地域になる範囲」。
              帯の色は用途地域の色を濃くしたものなので、凡例が無くても地図から読める。
              描画そのものは残っている（the-line-orig / the-band-fill / the-band-line）。 -->
-        <div class="lg"><span class="sw" style="background:#b8262c"></span><span><b>赤い棟</b>＝高さ20mの上限を超える（既存不適格）</span></div>
-        <div class="lg"><span class="sw" style="background:#b8262c;opacity:.85"></span><span>棟の上の赤い箱＝<b>20mを超えている部分</b></span></div>
+        <div class="lg"><span class="sw" style="background:#b8262c"></span><span><b>赤い棟</b>＝高さ20mの上限を超える（既存不適格）<span class="sub">。棟の上に伸びている濃い赤の箱が<b>上限を超えている部分</b></span></span></div>
         <div class="lg"><span class="sw" style="background:#8fa3b0"></span><span>灰青の棟＝外れたが上限内</span></div>
         <div class="lg"><span class="sw" style="background:#2e7d4f"></span><span>緑の棟＝線を越えた（高さの上限が外れる）</span></div>
-        <div class="lg"><span class="sw" style="background:#2e7d4f;opacity:.35"></span><span>緑の半透明＝<b>許容延床1.50倍ぶんの余地</b></span></div>
+        <!-- ★2026-09-04 「緑の半透明＝許容延床1.50倍ぶんの余地」の凡例行を削除。
+             実測＝60m拡大 0棟／100m拡大 1棟。条件（容積を9割以上使い切り、かつ 建築面積×5.00 ＞ 現延床）を
+             満たす棟がほぼ無く、凡例だけが出て地図に現れない状態だった。描画（line-ghost-3d）は残してある。 -->
 
         <h4>条例の説明対象（棟をクリック）</h4>
         <div class="lg"><span class="ln" style="border-top-color:#b8262c"></span><span><span class="who wA"></span><b>近隣住民ア</b>＝敷地から15m以内 <b>かつ</b> 外壁から50m以内<span class="sub">（敷地境界は外周で代用）</span></span></div>
@@ -790,7 +793,7 @@
         <div class="lg"><span class="sw slab15"></span><span><b>高度地区（15ｍ地区）</b>＝絶対高さの上限 <b>15m</b><span class="sub">。市全域39区画・5,367.2ha</span></span></div>
         <div class="lg"><span class="sw slab20"></span><span><b>高度地区（20ｍ地区）</b>＝絶対高さの上限 <b>20m</b><span class="sub">。市全域35区画・2,512.1ha。<b>この線の住居側はこれ</b></span></span></div>
         <div class="lg"><span class="sw" style="background:transparent;border:0"></span><span>★紫の板は<b>地面ではなく、その上限の高さに浮いています</b>（厚さ50cm・上端が上限）。<b>板を突き抜けている棟＝上限を超えている棟</b><span class="sub">。商業側は指定なし＝上限が無いので板が出ません</span></span></div>
-        <div class="lg"><span class="ln" style="border-top-color:#2f3b45;border-top-width:2px"></span><span><b>さいたま市の外周</b>（常時表示）<span class="sub">。PLATEAU <code>urf:UrbanPlanningArea</code>（都市計画区域）を結合。218.09km²＝公表市域217.43km²の100.3%</span></span></div>
+                <!-- ★2026-09-04 本人指示で「さいたま市の外周」の凡例行を削除（描画は残す＝city-outline）。 -->
         <div class="lg"><span class="sw" style="background:transparent;border:0"></span><span id="koudo-chip">ⓘ 高度地区の一覧（何mなのか・告示番号）</span></div>
         <span id="map-legend-note"></span>
         </div>
@@ -1101,15 +1104,11 @@
   </div>
 </div>
 
-<!-- ★対象範囲の棟数（#head-stat）は 2026-08-24 に上帯の右端から下帯の左端へ移した（本人指示）。
+<!-- ★2026-09-04 下帯は「データの出所と前提」1つに集約（本人指示）。棟数・抽出範囲・高さの補完順・ランドマークは #src-modal に入っている。
+     （2026-08-24 の #head-stat／#area-modal は廃止）
        操作ボタン（色分け／重ね／用途地域境の位置）は上帯のまま。
        クリックで「対象範囲とランドマーク」のポップアップを開く。 -->
   <footer>
-    <div id="head-stat" title="大宮駅・さいたま新都心駅から各1200m（徒歩15分）と2駅間の掃過帯。クリックで説明">
-      <span class="hs-long">大宮駅・さいたま新都心駅 </span><span class="hs-label">徒歩15分圏</span>
-      <b id="stat-count">--</b><span class="hs-unit">棟</span>
-      <span class="hs-more">🗺</span>
-    </div>
     <span id="footer">読み込み中…</span><span id="src-chip">ⓘ データの出所と前提</span>
   </footer>
 </div>
@@ -1127,6 +1126,13 @@
         <code>udx/bldg</code> 建築物・<code>udx/urf</code> 都市計画決定情報（用途地域）</td></tr>
       <tr><th>ライセンス</th><td>政府標準利用規約（第2.0版）／CC BY 4.0 相当</td></tr>
       <tr><th>抽出範囲</th><td>大宮駅・さいたま新都心駅から各 <b>1,200m</b>（徒歩15分＝不動産表示規約の80m/分×15分）と、<b>2駅を結ぶ線分から1,200m以内</b>（2円が掃過する帯）</td></tr>
+      <tr><th>高さの補完順</th><td><code>measuredHeight</code>（&gt;0）→ <code>gen:measureAttribute「建物高さ」</code>
+        → <code>storeysAboveGround × 3.0m</code> → 3.0m。<b><code>measuredHeight</code> に -9999 が15.4%、
+        <code>storeysAboveGround</code> に欠測センチネル 9999 があるため、そのままでは使えません</b></td></tr>
+      <tr><th>範囲の内訳</th><td>2駅の距離 1,641.9m／面積 8.46km²／3次メッシュ 17枚。
+        大宮のみ1200m内 12,098・両方の重なり 2,625・新都心のみ1200m内 9,325・掃過帯のみ 1,419</td></tr>
+      <tr><th>ランドマーク</th><td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1f2328;vertical-align:middle"></span> 大宮駅（範囲の北の極）／
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1f6f5c;vertical-align:middle"></span> さいたま新都心駅（南の極・座標は国土地理院の住所検索による）</td></tr>
       <tr><th>棟数</th><td><b id="src-n">--</b> 棟（うちLOD2 <b id="src-lod2">--</b> 棟・<b id="src-lodp">--</b>%）／用途地域が特定できない棟 <b id="src-null">--</b> 棟</td></tr>
     </table>
 
@@ -1268,64 +1274,7 @@
   </div>
 </div>
 
-<!-- 対象範囲とランドマークの説明。上帯右端の #head-stat をクリックで開く。
-     ★凡例からランドマーク節を外し、ここへ移した（2026-08-23 本人指示）。
-       凡例は「地図の色の読み方」だけにする。 -->
-<div id="area-modal">
-  <div id="area-box">
-    <span id="area-close">×</span>
-    <h3>対象範囲とランドマーク</h3>
-    <div class="meta">PLATEAU さいたま市 2025年度／地図上の破線が範囲の輪郭</div>
-
-    <h4>範囲の決め方</h4>
-    <p><b>大宮駅から半径1200m</b>と<b>さいたま新都心駅から半径1200m</b>の2つの円、および
-    <b>その2つの円を互いに移動させたときに掃過される帯</b>を合わせた範囲です。
-    2駅を結ぶ線分から1200m以内、という1つの条件で表せます（数学的にはカプセル形）。</p>
-    <p><b>1200mの根拠＝徒歩15分。</b>不動産の表示に関する公正競争規約が定める「徒歩1分＝80m」の換算で、80m/分 × 15分 = 1200m。</p>
-
-    <table>
-      <tr><th style="width:34%">2駅の距離</th><td>1,641.9 m</td></tr>
-      <tr><th>面積</th><td>8.46 km²</td></tr>
-      <tr><th>抽出した建物</th><td><b>25,467棟</b>（うちLOD2 6,468棟・25.4%）</td></tr>
-      <tr><th>内訳</th><td>大宮のみ1200m内 12,098／両方の重なり 2,625／新都心のみ1200m内 9,325／掃過帯のみ 1,419</td></tr>
-      <tr><th>3次メッシュ</th><td>17枚</td></tr>
-    </table>
-
-    <h4>地図上のランドマーク</h4>
-    <table>
-      <tr><th style="width:30%">記号</th><th>意味</th></tr>
-      <tr><td><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#1f2328;vertical-align:middle"></span> <b>大宮駅</b></td>
-          <td>範囲の北の極。ここから半径1200m＝徒歩15分</td></tr>
-      <tr><td><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:#1f6f5c;vertical-align:middle"></span> <b>さいたま新都心駅</b></td>
-          <td>範囲の南の極。同じく半径1200m＝徒歩15分。座標は国土地理院の住所検索による</td></tr>
-      <tr><td><span style="display:inline-block;width:11px;height:11px;border-radius:3px;background:#1a1d21;vertical-align:middle"></span> <b>新庁舎予定地</b>（四角＝建物。丸は駅）</td>
-          <td><b>さいたま市の新しい本庁舎の整備予定地。2031年度（令和13年度）の移転をめざす。</b>新都心駅から南東へ約330m、大宮駅から南南東へ約1.9km。令和4年4月に市役所の位置に関する条例の改正議案が可決され、<b>令和8年4月に基本設計（地上19階・最高94m・延床約64,000㎡）が公表されている</b></td></tr>
-      <tr><td><span style="display:inline-block;width:22px;border-top:2px dashed #1f2328;vertical-align:middle"></span> <b>破線</b></td>
-          <td>対象範囲の輪郭（上記のカプセル形）</td></tr>
-    </table>
-    <p class="meta">ランドマークの丸をクリックすると、それぞれの詳細が出ます。</p>
-
-    <h4>なぜこの2駅なのか</h4>
-    <p><b>新庁舎の移転が、この案の問いの出発点です。</b>市の本庁舎が新都心へ動くとき、
-    大宮駅と新都心のあいだの用途地域をどう扱うのか——それを線を動かして試せるようにしています。</p>
-
-    <h4>この回廊は、データが最もそろっている場所でもあります</h4>
-    <table>
-      <tr><th style="width:38%">2駅を結ぶ軸からの距離</th><th>棟数</th><th>LOD2</th></tr>
-      <tr><td>0–200 m</td><td>1,018</td><td><b>100.0%</b></td></tr>
-      <tr><td>200–400 m</td><td>1,460</td><td><b>93.6%</b></td></tr>
-      <tr><td>400–600 m</td><td>2,066</td><td>44.4%</td></tr>
-      <tr><td>800–1000 m</td><td>2,462</td><td>0.2%</td></tr>
-    </table>
-    <p class="meta">回廊の中心400mはLOD2がほぼ完全にそろっています。用途地域の構成も、
-    第一種住居200%（33.9%）・商業400%ほか（33.1%）・準工業200%（19.5%）・第二種住居200%（8.6%）と、
-    <b>住居系・商業系・工業系が隣り合う</b>状態です。</p>
-
-    <p class="meta" style="margin-top:10px">出典：国土交通省 PLATEAU（さいたま市 2025年度）／国土地理院 住所検索API／
-      <a href="https://www.city.saitama.lg.jp/006/007/002/022/index.html" target="_blank" rel="noopener">さいたま市 新庁舎整備の情報</a></p>
-  </div>
-</div>
-
+<!-- ★2026-09-04 #area-modal（対象範囲とランドマーク）は廃止。中身は #src-modal「データの出所と前提」に統合した（本人指示：下帯の情報を1つに集約）。 -->
 <!-- 新庁舎の建築計画。#shincho-chip をクリックで開く。
      ★右パネルが長くなるので諸元はここへ寄せた（2026-08-23 本人指示）。 -->
 <div id="shincho-modal">
@@ -3796,7 +3745,6 @@ function refreshPanel() {
   const feats = buildings.features;
   const n = feats.length;
   const nLod2 = feats.filter(f => f.properties.lod2 === true).length;
-  document.getElementById("stat-count").textContent = n.toLocaleString();
 
   renderLegend(feats);
   renderUsedStats(feats);
@@ -3804,11 +3752,13 @@ function refreshPanel() {
   const nZoneNull = feats.filter(f => f.properties.zone_now == null).length;
   /* ★下帯は1行だけ。内訳はすべて #src-modal へ（2026-08-23 本人指示）。
      高さの補完順だけは #src-modal から下帯へ移した（2026-08-23 本人指示） */
-  /* ★対象範囲と棟数は、同じ下帯の #head-stat が持っている（2026-08-24 に上帯から移動）。
-     ここで繰り返すと同じ帯に同じ文字が2回出るので落とした。 */
+  /* ★下帯は「データの出所と前提」の要約1行だけ（2026-09-04）。詳細は右端の ⓘ → #src-modal。*/
+  /* ★2026-09-04 下帯は「データの出所と前提」1つに集約した（本人指示）。
+     棟数・抽出範囲・高さの補完順・ランドマークは、すべて #src-modal に入っている。
+     ここは要約1行だけを出し、詳細は右端の ⓘ から開く。 */
   document.getElementById("footer").textContent =
-    "PLATEAU さいたま市 2025年度（CityGML）"
-    + " ／ 高さ＝measuredHeight → gen「建物高さ」→ 階数×3m の順で補完";
+    "PLATEAU さいたま市 2025年度（CityGML）／ 大宮駅・さいたま新都心駅 徒歩15分圏 "
+    + n.toLocaleString() + "棟";
   document.getElementById("src-n").textContent    = n.toLocaleString();
   document.getElementById("src-lod2").textContent = nLod2.toLocaleString();
   document.getElementById("src-lodp").textContent = (nLod2 / n * 100).toFixed(1);
@@ -3952,12 +3902,6 @@ document.querySelectorAll("#layer-toggle button").forEach(btn => {
   document.getElementById("shincho-close").addEventListener("click", () => sm.classList.remove("open"));
   sm.addEventListener("click", e => { if (e.target === sm) sm.classList.remove("open"); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") sm.classList.remove("open"); });
-
-  const am = document.getElementById("area-modal");
-  document.getElementById("head-stat").addEventListener("click", () => am.classList.add("open"));
-  document.getElementById("area-close").addEventListener("click", () => am.classList.remove("open"));
-  am.addEventListener("click", e => { if (e.target === am) am.classList.remove("open"); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape") am.classList.remove("open"); });
 
   const rm = document.getElementById("src-modal");
   document.getElementById("src-chip").addEventListener("click", () => rm.classList.add("open"));
