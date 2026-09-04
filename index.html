@@ -3315,10 +3315,15 @@ function computeAggregate() {
       // 商業を後退：高さの上限を超える棟＝説明が要る側の当事者
       if (st.state === "over") subjects.push({ f: t.f, h: Number(t.p.h) });
     } else {
-      // 商業を拡大：高さの上限が外れ、新しい上限まで建て替わりうる棟
-      if (st.state === "freed" && t.cap != null && Number(t.p.h) > t.cap) {
-        subjects.push({ f: t.f, h: Number(t.p.h) });
-      }
+      /* ★商業を拡大：当事者は立たない（2026-09-04 に条件を見直した）。
+         旧コードは `st.state === "freed" && h > t.cap` としていたが、
+         t.cap は capAcrossLine＝常に住居側の上限なので、これは
+         「いま20mを超えているか」＝後退側と同じ判定になっていた。
+         適法に建った棟が自分の上限を超えることはないので、実測でも 0/88 で常に空。
+         そもそも条例の説明義務は用途地域の変更ではなく個々の建築計画に紐づく。
+         拡大側は天井が外れるだけで、何mで建て替わるかが決まっていないため、
+         日影も「高さの2倍」も引けない＝説明対象は機械的に決められない。
+         → 数字を0で並べるのをやめ、renderAggregate で理由を出す。 */
     }
   });
   const set1 = new Set(), set2 = new Set(), set3 = new Set(), all = new Set();
@@ -3357,6 +3362,18 @@ function computeAggregate() {
   aggCache = { n: subjects.length, r1: kinA.size, r2: kinB.size, r3: shuu.size,
                kinTotal: kinA.size + kinB.size,
                all: all.size, shadows: shadows, topics: topics, keyFeat: keyFeat };
+  /* 拡大側は「説明対象」ではなく、機械的に言えることだけを持たせる */
+  if (offsetM > 0) {
+    const g = new Set(), cg = new Set(); let nf = 0;
+    lineTargets.forEach(t => {
+      const st = classify(t); if (!st || st.state !== "freed") return;
+      nf++;
+      const k = t.f.properties.grp || t.f.properties.id;
+      g.add(k);
+      if (t.capNow != null) cg.add(k);
+    });
+    aggCache.expand = { n: nf, grp: g.size, capGone: cg.size };
+  }
 }
 
 function renderAggregate() {
@@ -3366,6 +3383,20 @@ function renderAggregate() {
     return;
   }
   const a = aggCache;
+  if (a.expand) {
+    /* ★拡大側。0を並べると「計算していない」ように見えるので、言えることと言えない理由を出す。 */
+    el.innerHTML =
+      kv("線を越えた棟", a.expand.n.toLocaleString() + " 棟（複合体 " + a.expand.grp.toLocaleString() + "）") +
+      kv("<b>高さの上限が外れる</b>", "<b>" + a.expand.capGone.toLocaleString() + " 複合体</b>") +
+      kv('<span class="who wS"></span>条例の説明対象', "<b>この操作では出せません</b>") +
+      '<div class="note" style="margin-top:6px;"><b>条例の説明義務は、用途地域の変更ではなく個々の建築計画に紐づきます。</b>'
+      + '拡大側は天井が外れるだけで、<b>何mで建て替わるかが決まっていない</b>ため、'
+      + '「外壁から高さの2倍」も「冬至日の日影」も引けません。'
+      + '<b>ここを埋めるには建て替え後の高さを仮定する必要があり、それは実測ではなく推定になります。</b>'
+      + 'この画面は推定を混ぜない方針なので、空欄のままにしています。<br>'
+      + '説明対象が出るのは<b>後退側</b>——既存不適格になる棟は<b>いまの高さが実測でわかっている</b>ためです。</div>';
+    return;
+  }
   el.innerHTML =
     kv('<span class="who wS"></span>当事者になる棟', a.n.toLocaleString() + " 棟") +
     kv('<span class="who wA"></span><span style="color:#b8262c">近隣住民ア（15m かつ 50m）</span>', a.r1.toLocaleString() + " 棟") +
