@@ -94,6 +94,19 @@
   .kv .k { color: var(--sub); }
   .kv .v { font-variant-numeric: tabular-nums; }
   .note { font-size: 11px; color: var(--sub); line-height: 1.6; }
+  /* ★ダッシュボード型（2026-09-04 本人指示）。ラベルが折り返して数字と分断されるのを止める：
+     数字を上・ラベルを下に置いた2列のタイル。.wide は2列ぶち抜き（合計など） */
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 6px; }
+  .tile { background: rgba(255,255,255,.55); border: 1px solid rgba(0,0,0,.08); border-radius: 6px;
+          padding: 6px 8px 5px; min-width: 0; }
+  .tile .n { font-size: 20px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums;
+             white-space: nowrap; }
+  .tile .n small { font-size: 11px; font-weight: 400; color: var(--sub); margin-left: 2px; }
+  .tile .l { font-size: 11px; color: var(--sub); line-height: 1.3; margin-top: 2px; }
+  .tile.wide { grid-column: 1 / -1; }
+  .tile.hi { border-color: rgba(184,38,44,.45); background: rgba(255,255,255,.75); }
+  .tile.dim .n { color: var(--sub); font-size: 15px; }
+  .note.tight { line-height: 1.45; margin-top: 2px; }
   /* ★下帯＝対象範囲の棟数 ＋ 出所の1行 ＋ ⓘ。棟数は 2026-08-24 に上帯から移した。
      #footer が伸び縮みして、棟数を左端・ⓘを右端に寄せる。 */
   footer {
@@ -790,6 +803,8 @@
         <div class="lg"><span class="sw" style="background:#1a1d21"></span><span><b>黒い棟</b>＝<b>さいたま市 新庁舎</b>（基本設計・最高94m）<span class="sub">。用途地域の色ではない。右パネルのボタンで消せる</span></span></div>
 
         <div class="lg"><span class="sw" style="background:#f2c200"></span><span><b>黄色く点滅</b>＝<b>まだ答えていない論点が残っている棟</b><span class="sub">。「準備する想定回答」にチェックを入れると点滅が止まる＝説明充足率が上がる</span></span></div>
+        <!-- ★条例の説明チップ。右帯「条例が定める説明対象」から凡例へ移した（2026-09-04 本人指示）。id は不変 -->
+        <div id="jourei-chip" style="margin:4px 0 2px;">📖 さいたま市 紛争防止条例とは（クリックで説明）</div>
 
         <h4>高度地区</h4>
         <div class="lg"><span class="sw slab15"></span><span><b>高度地区（15ｍ地区）</b>＝絶対高さの上限 <b>15m</b><span class="sub">。市全域39区画・5,367.2ha</span></span></div>
@@ -859,7 +874,6 @@
 
       <div id="jou-result">
         <div class="section-title">条例が定める説明対象</div>
-        <div id="jourei-chip">📖 さいたま市 紛争防止条例とは（クリックで説明）</div>
         <button id="shincho-btn" type="button" class="active">↩ 現況に戻す（新庁舎を消す）</button>
         <div id="shincho-chip">🏛 新庁舎の建築計画（クリックで説明）</div>
         <div id="jou-stats"></div>
@@ -1415,7 +1429,7 @@
       <li>色分けの1モードとして<b>参考表示</b>するだけ</li>
       <li>棟をクリックしたときのポップアップに数値を出す</li>
       <li><b>線を動かしたときの既存不適格の判定には一切使っていない</b></li>
-      <li>「線を越えた棟のうち、すぐ伸ばせる棟」の目安（容積消化率0.9以上）にだけ副次的に使用</li>
+      <li>画面の判定には使っていない（2026-09-04 に「すぐ伸ばせる棟」の参考表示も外した）</li>
     </ul>
 
     <p class="meta" style="margin-top:10px">計算できたのは 25,467棟中 22,842棟（89.7%）。
@@ -2640,11 +2654,10 @@ function checkBreakdown(by) {
 /* 後退側＝第二種住居地域になる棟。t4「事業を続けられるか」の答えをそのまま出す */
 function usageRowsRetreat(propsList) {
   const t = usageTally(propsList);
-  let h = kv('<b>用途上、建てられなくなる棟</b>',
-             '<b style="color:' + (t.ng ? COLOR_OVER : "#2e7d4f") + '">' + t.ng + " 棟</b>"
-             + (t.ng ? "（10,000㎡超の店舗）" : "（第二種住居地域で不可の用途は該当なし）"));
-  if (t.check) h += kv("うち規模・業態の確認が要る棟", t.check + " 棟" + checkBreakdown(t.byCheck));
-  if (t.unknown) h += kv("用途が不明で判定できない棟", t.unknown + " 棟（bldg:usage = 461）");
+  let h = tile('<span style="color:' + (t.ng ? COLOR_OVER : "#2e7d4f") + '">' + t.ng + '<small>棟</small></span>',
+               "用途上、建てられなくなる" + (t.ng ? "（10,000㎡超の店舗）" : ""));
+  if (t.check) h += tile(t.check + "<small>棟</small>", "規模・業態の確認が要る" + checkBreakdown(t.byCheck));
+  if (t.unknown) h += tile(t.unknown + "<small>棟</small>", "用途が不明（usage 461）", "dim");
   return h;
 }
 
@@ -2654,9 +2667,7 @@ function usageRowsExpand(propsList) {
   const n = t.ng + t.check;
   const inner = Object.keys(t.byCheck).map(k => k + " " + t.byCheck[k]).join("・")
               + (t.ng ? (Object.keys(t.byCheck).length ? "・" : "") + "10,000㎡超の店舗 " + t.ng : "");
-  return kv("用途上の制限が外れる棟",
-            n + " 棟" + (n ? "（" + inner + "＝第二種住居地域では制限がかかる用途）"
-                           : "（もともと制限のかかる用途の棟がありません）"));
+  return tile(n + "<small>棟</small>", "用途上の制限が外れる" + (n ? "（" + inner + "）" : ""));
 }
 
 function renderLineStats() {
@@ -2702,37 +2713,27 @@ function renderLineStats() {
   exList.sort((x, y) => x - y);
   const exMed = exList.length ? exList[Math.floor(exList.length / 2)] : 0;
 
-  let html = '<div class="kv"><span class="k">操作</span><span class="v">' +
-    (offsetM > 0 ? "商業地域を住居側へ " + offsetM + "m 広げた" : "商業地域を " + (-offsetM) + "m 後退させた") +
-    "</span></div>";
-
+  /* ★2026-09-04 本人指示：ダッシュボード型。「操作」「線を越えた棟」「すぐ伸ばせる棟」は削除。
+     棟数の内訳は下の「説明対象になる棟」に出るので、ここは「何が起きたか」だけ。 */
+  let html;
   if (offsetM < 0) {
-    html +=
-      kv("線から外れた棟", crossed.toLocaleString() + " 棟（複合体 " + crossGrp.size + "）") +
-      kv('<b>高さ20mの上限を超える棟</b>',
-         '<b style="color:' + COLOR_OVER + '">' + over.toLocaleString() + " 棟</b>（複合体 " + overGrp.size + "）") +
-      kv("超える高さ", over ? exMed.toFixed(1) + " m（中央値）／最大 " + exMax.toFixed(1) + " m" : "—") +
-      kv("許容延床の倍率", (RATIO_B / RATIO_A).toFixed(2) + " 倍") +
-      usageRowsRetreat(crossedProps);
+    html = tiles(
+      tile('<span style="color:' + COLOR_OVER + '">' + over.toLocaleString() + '<small>棟</small></span>',
+           "高さ20mの上限を超える＝<b>既存不適格</b>（複合体 " + overGrp.size + "）", "hi") +
+      tile(crossed.toLocaleString() + "<small>棟</small>", "線から外れて第二種住居地域になる（複合体 " + crossGrp.size + "）") +
+      tile(over ? exMed.toFixed(1) + "<small>m</small>" : "—", over ? "超える高さの中央値／最大 " + exMax.toFixed(1) + " m" : "超える高さ") +
+      tile((RATIO_B / RATIO_A).toFixed(2) + "<small>倍</small>", "許容延床の倍率（400/80 → 200/60）") +
+      usageRowsRetreat(crossedProps));
   } else {
-    html +=
-      kv("線を越えた棟", crossed.toLocaleString() + " 棟（複合体 " + crossGrp.size + "）") +
-      kv("<b>20mの天井が外れる棟</b>", "<b>" + freedCeil.toLocaleString() + " 棟</b>（複合体 " + kGrp.size + "・高度地区20ｍ地区にいた棟）") +
-      kv("うち現に20mを超えている棟",
-         freedTall ? freedTall.toLocaleString() + " 棟（既存不適格でなくなる）"
-                   : "0 棟（この範囲では、天井を現に超えている棟はありません）") +
-      kv("許容延床の倍率", (RATIO_A / RATIO_B).toFixed(2) + " 倍") +
-      kv("（参考）すぐ伸ばせる棟", growReady.toLocaleString() + " 棟 ／ " + Math.round(addFloor).toLocaleString() + " m²") +
-      usageRowsExpand(crossedProps);
+    html = tiles(
+      tile(freedCeil.toLocaleString() + "<small>棟</small>", "20mの天井が外れる（複合体 " + kGrp.size + "）", "hi") +
+      tile(freedTall.toLocaleString() + "<small>棟</small>", freedTall ? "現に20m超＝既存不適格でなくなる" : "現に20mを超えている棟はない", freedTall ? "" : "dim") +
+      tile((RATIO_A / RATIO_B).toFixed(2) + "<small>倍</small>", "許容延床の倍率（200/60 → 400/80）") +
+      usageRowsExpand(crossedProps));
   }
-  html += '<div class="note" style="margin-top:8px;">' +
-    '既存不適格の判定は<b>高度地区（20ｍ地区）の絶対高さ</b>と実測の建物高さの比較。' +
-    '<br><b>用途上の制限</b>は建築基準法 <b>別表第二（へ）項</b>（第二種住居地域）。'+
-    'PLATEAUの <code>bldg:usage</code> は17分類で<b>作業場の床面積・倉庫業を営むかまでは分からない</b>ため、'+
-    '機械で判定できるのは<b>10,000㎡超の店舗</b>だけ。工場・運輸倉庫施設・作業所併用住宅は<b>要確認</b>として別に数えている。' +
-    '<br>許容延床の倍率は 容積率÷建蔽率 の比（400/80 ÷ 200/60）。' +
-    '<b>どちらの判定も敷地面積を使わない</b>（建築面積が約分で消える）ので、推定を含まない。' +
-    '</div>';
+  html += '<div class="note tight">判定＝高度地区の絶対高さ × 実測の建物高さ／用途＝建築基準法 別表第二（へ）項。'
+        + '<b>敷地面積は使わない</b>（推定を含まない）。'
+        + '<code>bldg:usage</code> は17分類のため、機械判定は10,000㎡超の店舗のみ。工場・運輸倉庫・作業所併用住宅は要確認。</div>';
   el.innerHTML = html;
 }
 
@@ -3402,26 +3403,24 @@ function renderAggregate() {
     el.innerHTML =
       /* ★棟数と「天井が外れる」は真上の「線を動かした結果」に出ている。ここには出さない
          （2026-09-04 本人指摘。同じ数字が右帯に二度出ていた）。 */
-      kv('<span class="who wS"></span><b>用途地域が変わる当事者＝説明対象</b>',
-         "<b>" + a.expand.subj.toLocaleString() + " 複合体</b>") +
-      kv('<span class="who wA"></span>近隣住民・周辺住民（中高層条例）', "<b>この操作では出せません</b>") +
-      '<div class="note" style="margin-top:6px;">'
-      + '<b>条例の説明義務は、用途地域の変更ではなく個々の建築計画に紐づきます。</b>'
-      + '拡大側は天井が外れるだけで<b>何mで建て替わるかが決まっていない</b>ため、'
-      + '「外壁から高さの2倍」も「冬至日の日影」も引けません（＝建て替え後の高さを仮定する推定になる）。'
-      + '近隣・周辺まで出せるのは<b>後退側</b>——既存不適格になる棟は<b>いまの高さが実測でわかっている</b>ためです。<br>'
-      + '<b>拡大側の当事者は全員が同じ6つの疑問を持つ</b>ので、説明充足率は<b>0%か100%のどちらか</b>にしかなりません。</div>';
+      tiles(
+        tile(a.expand.subj.toLocaleString() + "<small>複合体</small>", '<span class="who wS"></span>用途地域が変わる当事者＝説明対象', "wide") +
+        tile("—", '<span class="who wA"></span>近隣住民ア・イ（条例）', "dim") +
+        tile("—", '<span class="who wC"></span>周辺住民（条例）', "dim")) +
+      '<div class="note tight"><b>近隣・周辺は出せない</b>：条例の説明義務は個々の建築計画に紐づく。'
+      + '拡大側は建て替え後の高さが決まっていないため「高さの2倍」も「冬至日の日影」も引けない（引けば推定になる）。'
+      + '当事者は全員が同じ6つの疑問を持つので、説明充足率は<b>0%か100%</b>のどちらか。</div>';
     return;
   }
   el.innerHTML =
-    kv('<span class="who wS"></span>当事者になる棟', a.n.toLocaleString() + " 棟") +
-    kv('<span class="who wA"></span><span style="color:#b8262c">近隣住民ア（15m かつ 50m）</span>', a.r1.toLocaleString() + " 棟") +
-    kv('<span class="who wB"></span><span style="color:#e08a2c">近隣住民イ（高さの2倍 かつ 冬至日の日影）</span>', a.r2.toLocaleString() + " 棟") +
-    kv('<b>近隣住民 計＝説明義務（第9条1項）</b>', "<b>" + a.kinTotal.toLocaleString() + " 棟</b>") +
-    kv('<span class="who wC"></span><span style="color:#2b6cb0">周辺住民（求められたら説明・第9条2項）</span>', a.r3.toLocaleString() + " 棟") +
-    kv("<b>説明対象の合計（当事者含む・重複除く）</b>", "<b>" + a.all.toLocaleString() + " 棟</b>") +
-    '<div class="note" style="margin-top:6px;">複合体（同一敷地に分割登録された棟）を1件に寄せて数えています。'
-    + '1棟が複数の当事者に対して違う層になることがあるため、強い義務（ア＞イ＞周辺）に寄せて重複を除いています。</div>';
+    tiles(
+      tile(a.all.toLocaleString() + "<small>棟</small>", "<b>説明対象の合計</b>（当事者含む・重複除く）", "wide hi") +
+      tile(a.n.toLocaleString() + "<small>棟</small>", '<span class="who wS"></span>当事者（既存不適格）') +
+      tile(a.kinTotal.toLocaleString() + "<small>棟</small>", "<b>近隣住民 計＝説明義務</b>（第9条1項）") +
+      tile('<span style="color:#b8262c">' + a.r1.toLocaleString() + '</span><small>棟</small>', '<span class="who wA"></span>近隣住民ア（敷地境界15m）') +
+      tile('<span style="color:#e08a2c">' + a.r2.toLocaleString() + '</span><small>棟</small>', '<span class="who wB"></span>近隣住民イ（高さ2倍かつ冬至日影）') +
+      tile('<span style="color:#2b6cb0">' + a.r3.toLocaleString() + '</span><small>棟</small>', '<span class="who wC"></span>周辺住民（求められたら説明・第9条2項）', "wide")) +
+    '<div class="note tight">複合体は1件に寄せ、層は ア＞イ＞周辺 の順に吸収して重複を除く。</div>';
 }
 
 
@@ -3895,6 +3894,9 @@ function renderUsedStats(feats) {
     kv("容積消化率 50% 未満", slack.toLocaleString() + " 棟（" + (slack / vals.length * 100).toFixed(1) + "%）");
 }
 function kv(k, v) { return '<div class="kv"><span class="k">' + k + '</span><span class="v">' + v + "</span></div>"; }
+/* タイル：n＝数字（HTML可）・l＝ラベル・cls＝"wide"/"hi"/"dim" */
+function tile(n, l, cls) { return '<div class="tile' + (cls ? " " + cls : "") + '"><div class="n">' + n + '</div><div class="l">' + l + "</div></div>"; }
+function tiles(inner) { return '<div class="tiles">' + inner + "</div>"; }
 
 /* ---------------- 操作 ---------------- */
 /* 色分けはトグル。押しているものをもう一度押すと OFF＝色分けなし（"plain"）。
