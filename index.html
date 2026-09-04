@@ -1505,12 +1505,12 @@ const COLOR_UNKNOWN = "#c7cbcf";
 const COLOR_PLAIN   = "#b9c2c9";   // 色分けなしのときの建物色
 /* 容積消化率の色（低い＝余力あり＝青 / 高い＝使い切り＝赤） */
 const USED_BINS = [
-  { max: 0.25, color: "#2b6cb0", label: "〜0.25（大きな余力）" },
-  { max: 0.50, color: "#63a0cf", label: "0.25〜0.50" },
-  { max: 0.75, color: "#c9d6b0", label: "0.50〜0.75" },
-  { max: 1.00, color: "#efa860", label: "0.75〜1.00" },
-  { max: 1.50, color: "#d9613a", label: "1.00〜1.50（超過）" },
-  { max: Infinity, color: "#8f1d24", label: "1.50〜" }
+  { max: 0.25, color: "#2b6cb0", label: "〜25%（大きな余力）" },
+  { max: 0.50, color: "#63a0cf", label: "25〜50%" },
+  { max: 0.75, color: "#c9d6b0", label: "50〜75%" },
+  { max: 1.00, color: "#efa860", label: "75〜100%" },
+  { max: 1.50, color: "#d9613a", label: "100〜150%（超過）" },
+  { max: Infinity, color: "#8f1d24", label: "150%〜" }
 ];
 const COLOR_NO_USED = "#d5d8db";
 
@@ -1770,7 +1770,7 @@ function addLayers() {
       "<b>" + (p.zone_now_name || "用途地域なし") + "</b>　" +
       fmt(p.h, 1) + " m / " + (p.storeys != null ? p.storeys + "階" : "階数なし") + "<br>" +
       '<span style="color:#5b6470;">容積消化率 </span>' +
-      (p.used_ratio != null && p.used_ratio !== "" ? fmt(p.used_ratio, 2) : "—");
+      (p.used_ratio != null && p.used_ratio !== "" ? fmt(p.used_ratio * 100, 1) + "%" : "—");
   });
 }
 
@@ -1818,6 +1818,9 @@ function fmt(v, d) {
   return isNaN(n) ? String(v) : n.toFixed(d === undefined ? 0 : d);
 }
 const H_SRC_LABEL = { measured: "measuredHeight", gen: "gen「建物高さ」", storeys: "階数×3m", default: "既定値3m" };
+/* 耐火構造区分。出所＝さいたま市 2025年度 CityGML 同梱の
+   codelists/BuildingDetailAttribute_fireproofStructureType.xml（実データは1001/1002/1003/1011の4値のみ） */
+const FIREPROOF_NAME = { "1001": "耐火", "1002": "準耐火造", "1003": "その他", "1011": "不明" };
 
 function showPopup(feature) {
   const p = feature.properties;
@@ -1831,9 +1834,10 @@ function showPopup(feature) {
       (p.far_spec != null && p.far_spec !== "" ? fmt(p.far_spec, 0) + "%" : "—") + " / " +
       (p.bcr_spec != null && p.bcr_spec !== "" ? fmt(p.bcr_spec, 0) + "%" : "—")],
     ["許容延床（概算）", p.cap_now != null && p.cap_now !== "" ? fmt(p.cap_now, 0) + " m²" : "—"],
-    ["容積消化率", p.used_ratio != null && p.used_ratio !== "" ? fmt(p.used_ratio, 2) : "—"],
+    ["容積消化率", p.used_ratio != null && p.used_ratio !== "" ? fmt(p.used_ratio * 100, 1) + "%" : "—"],
     ["用途", p.usage ? (USAGE_NAME[String(p.usage)] || "—") + "（" + p.usage + "）" : "—"],
-    ["耐火構造区分", p.fireproof || "—"],
+    ["耐火構造区分", p.fireproof
+      ? (FIREPROOF_NAME[String(p.fireproof)] || "—") + "（" + p.fireproof + "）" : "—"],
     ["大宮駅／新都心駅からの距離", fmt(p.dist, 0) + " m ／ " + fmt(p.dist_ss, 0) + " m"]
   ];
   const html =
@@ -3820,10 +3824,10 @@ function renderUsedStats(feats) {
   const slack = vals.filter(v => v < 0.5).length;
   el.innerHTML =
     kv("算出できた棟", vals.length.toLocaleString() + " 棟（" + (vals.length / feats.length * 100).toFixed(1) + "%）") +
-    kv("中央値", q(0.5).toFixed(2)) +
-    kv("第1四分位 / 第3四分位", q(0.25).toFixed(2) + " / " + q(0.75).toFixed(2)) +
-    kv("容積消化率 1.00 以上", over.toLocaleString() + " 棟（" + (over / vals.length * 100).toFixed(1) + "%）") +
-    kv("容積消化率 0.50 未満", slack.toLocaleString() + " 棟（" + (slack / vals.length * 100).toFixed(1) + "%）");
+    kv("中央値", (q(0.5) * 100).toFixed(1) + "%") +
+    kv("第1四分位 / 第3四分位", (q(0.25) * 100).toFixed(1) + "% / " + (q(0.75) * 100).toFixed(1) + "%") +
+    kv("容積消化率 100% 以上", over.toLocaleString() + " 棟（" + (over / vals.length * 100).toFixed(1) + "%）") +
+    kv("容積消化率 50% 未満", slack.toLocaleString() + " 棟（" + (slack / vals.length * 100).toFixed(1) + "%）");
 }
 function kv(k, v) { return '<div class="kv"><span class="k">' + k + '</span><span class="v">' + v + "</span></div>"; }
 
