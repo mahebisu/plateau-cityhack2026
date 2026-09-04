@@ -114,21 +114,41 @@
      「ここから先は推定」を色で伝える。数字は consent_model.js（ブラウザ版）で計算する。
      ?kgi=0 で丸ごと非表示（キルスイッチ＝v5 の画面に戻る）。
      ===================================================================== */
-  #kgi { background: #2f4858; color: #ffe4e0; border-radius: 8px; padding: 7px 10px 7px; }
-  #kgi.off { display: none; }
-  #kgi .kh { display: flex; justify-content: space-between; gap: 8px; font-size: 10.5px; color: #c8f8ff; }
+  #kgi { background: #2f4858; color: #ffe4e0; border-radius: 8px; padding: 6px 10px 6px; }
+  #kgi.off, #reach-block.off { display: none; }
+  #kgi .kh { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #c8f8ff; align-items: center; }
   #kgi .kh #kgi-ctx { text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: .9; min-width: 0; flex: 1 1 auto; }
-  #kgi .kh > span:first-child { white-space: nowrap; flex: 0 0 auto; }
-  #kgi .kn { display: grid; grid-template-columns: 1.1fr 1fr .8fr; gap: 6px; margin-top: 2px; align-items: end; }
-  #kgi .kn .v { font-size: 22px; font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; white-space: nowrap; color: #ffe4e0; }
-  #kgi .kn .v.main { font-size: 30px; color: #fff; }
-  #kgi .kn .l { font-size: 10px; color: #c8f8ff; margin-top: 1px; line-height: 1.25; }
-  #kgi .km { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 10.5px; color: #c8f8ff; }
-  #kgi .km button { font-size: 10.5px; padding: 2px 6px; background: rgba(255,255,255,.08); color: #ffe4e0;
-                    border: 1px solid rgba(255,228,224,.35); border-radius: 4px; cursor: pointer; font-family: inherit; }
-  #kgi .km button.active { background: #ff7675; color: #2f4858; border-color: #ff7675; font-weight: 700; }
-  #kgi .km .reach { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  #kgi .kh #consent-open { background: none; border: 0; padding: 0 0 0 6px; color: #c8f8ff; text-decoration: underline; font-size: 10px; cursor: pointer; font-family: inherit; }
+  #kgi .kh > span:first-child { white-space: nowrap; flex: 0 0 auto; font-size: 12px; color: #fff; }
+  .tag { display: inline-block; font-size: 9.5px; font-weight: 700; padding: 0 5px; border-radius: 3px; margin-left: 5px; vertical-align: 1px;
+         background: #c8f8ff; color: #2f4858; }
+  .tag.tag-real { background: #ff7675; color: #2f4858; }
+  #kgi .kmain { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+  #kgi .big { font-size: 40px; font-weight: 700; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap; flex: 0 0 auto; }
+  #kgi .bar { flex: 1 1 auto; min-width: 0; }
+  #kgi .track { position: relative; height: 10px; border-radius: 5px; background: rgba(255,255,255,.14); overflow: visible; }
+  #kgi .fill { height: 100%; border-radius: 5px; background: #ff7675; transition: width .35s; }
+  #kgi .tgt { position: absolute; top: -3px; width: 2px; height: 16px; background: #c8f8ff; transform: translateX(-1px); }
+  #kgi .barlab { display: flex; justify-content: space-between; font-size: 9.5px; color: #c8f8ff; margin-top: 2px; }
+  #kgi .barlab .t23 { color: #c8f8ff; font-weight: 700; }
+  #kgi .gap { font-size: 10.5px; color: #ffe4e0; margin-top: 1px; white-space: nowrap; }
+  #kgi .krow { display: flex; align-items: center; gap: 12px; margin-top: 3px; }
+  #kgi .kv2 { display: flex; flex-direction: column; line-height: 1.1; }
+  #kgi .kv2 .v { font-size: 18px; font-weight: 700; color: #ffe4e0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #kgi .kv2 .l { font-size: 9.5px; color: #c8f8ff; }
+  #kgi #consent-open.detail { margin-left: auto; font-family: inherit; font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 6px;
+        border: 1px solid #ff7675; background: #ff7675; color: #2f4858; cursor: pointer; white-space: nowrap; }
+  #kgi #consent-open.detail:hover { background: #ffe4e0; }
+  /* ①②の見出しを同じ型に */
+  .knob-head { display: flex; align-items: center; gap: 6px; }
+  .knob-no { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%;
+             background: #2f4858; color: #fff; font-size: 12px; font-weight: 700; flex: 0 0 auto; }
+  .knob-head .gauge-title { font-size: 13px; font-weight: 700; }
+  .knob-head .knob-val { margin-left: auto; font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .knob-head .knob-val b { color: var(--ink); font-size: 13px; }
+  #reach-block #kgi-media { margin-top: 4px; gap: 4px; flex-wrap: nowrap; }
+  #reach-block #kgi-media .lbl { font-size: 11px; color: var(--sub); margin-right: 2px; white-space: nowrap; }
+  #reach-block #kgi-media button { font-size: 11px; padding: 3px 8px; }
+  #reach-block #kgi-media button.active { background: #2f4858; color: #fff; border-color: #2f4858; }
   /* ★下帯＝対象範囲の棟数 ＋ 出所の1行 ＋ ⓘ。棟数は 2026-08-24 に上帯から移した。
      #footer が伸び縮みして、棟数を左端・ⓘを右端に寄せる。 */
   footer {
@@ -216,6 +236,7 @@
   /* ★2026-08-25 本人指示：説明充足率の既定を「2/3を満たす最低限の説明」にした。
      目標を選ぶ行＋最低限セットのバッジ。右帯の高さに効くので行は1段に詰める。 */
   .fq-head { display: flex; align-items: center; gap: 8px; }
+  .knob-head #gauge-chip { margin-left: auto; }
   #recipe-row { gap: 3px; margin-left: auto; }
   #recipe-row button { font-size: 10.5px; padding: 2px 6px; font-weight: 400; }
   #recipe-msg b { color: var(--ink); }
@@ -746,7 +767,7 @@
      ★右帯を1画面（1366×768＝#side 582px）に収めるための詰め（2026-09-04・KGI帯の追加に伴う）
      ⚠ 同じセレクタの元の定義より後ろに置かないと効かない（同じ詳細度は後勝ち）。ここは <style> の末尾。
      ===================================================================== */
-  #side { padding-top: 10px; gap: 10px; }
+  #side { padding-top: 8px; gap: 8px; }
   .faq-row { padding: 2px 0; line-height: 1.3; font-size: 11.5px; }
   .faq-row .box { width: 14px; height: 14px; margin-top: 1px; }
   .faq-row .txt-id { display: none; }           /* 「誰に生じるか」は title（ホバー）へ */
@@ -754,7 +775,7 @@
   #threshold-list { flex-wrap: nowrap; gap: 4px 10px; margin-top: 4px; overflow: hidden; }
   .th-row { font-size: 11px; white-space: nowrap; }
   #recipe-msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #gauge-value { margin: 0 0 5px; font-size: 24px; }
+  #gauge-value { margin: 0 0 4px; font-size: 22px; }
 </style>
 </head>
 <body>
@@ -832,22 +853,26 @@
     <div id="side-handle"><span id="side-handle-label">集計を表示</span><span class="caret">▲</span></div>
     <div id="side">
       <!-- ★KGI帯（推定・濃紺）。★動的に触るので <script> より前に置く。id consent-open はこの中で生かす -->
-      <div id="kgi" title="同意率＝賛成する確率の平均（全員分母）。合意率＝同意率＋届かなかった人の黙認。推定＝係数は仮。係数と出典は右下のリンクから">
-        <div class="kh"><span><b>同意率</b>＝KGI（推定）<button type="button" id="consent-open" title="推定の中身（係数・感度・出典）を重ねて開きます。閉じれば元の画面に戻ります">係数と出典</button></span><span id="kgi-ctx">線を動かすと推定します</span></div>
-        <div class="kn">
-          <div><div class="v main" id="kgi-doui">--</div><div class="l">同意率（全員分母）</div></div>
-          <div><div class="v" id="kgi-goui">--</div><div class="l">合意率（黙認込み）</div></div>
-          <div><div class="v" id="kgi-mokunin">--</div><div class="l">黙認＝差</div></div>
+      <!-- ★KGI帯（推定・濃紺）。同意率＝KGI を最大に、2/3（法令の最低条件）への到達をバーで示す。
+           ★動的に触るので <script> より前に置く。id consent-open はこの中の「説明計画詳細」ボタン -->
+      <div id="kgi" title="同意率＝賛成する確率の平均（全員分母）。合意率＝同意率＋届かなかった人の黙認。推定の中身は「説明計画詳細」で開く">
+        <div class="kh"><span><b>KGI　同意率</b><span class="tag">推定</span></span><span id="kgi-ctx">線を動かすと推定します</span></div>
+        <div class="kmain">
+          <div class="big"><span id="kgi-doui">--</span></div>
+          <div class="bar">
+            <div class="track"><div class="fill" id="kgi-fill" style="width:0%"></div><div class="tgt" style="left:66.7%"></div></div>
+            <div class="barlab"><span>0</span><span class="t23">2/3＝法令の最低条件</span><span>100%</span></div>
+            <div class="gap" id="kgi-gap">—</div>
+          </div>
         </div>
-        <div class="km" id="kgi-media"><span>② 周知</span>
-          <button type="button" data-m="shiho" class="active" title="市報さいたま のみ（いまの運用）">市報のみ</button>
-          <button type="button" data-m="kairan" title="市報＋HP＋SNS＋自治会の回覧板">＋回覧板</button>
-          <button type="button" data-m="kobetsu" title="上に加えて個別通知を投函（近隣・周辺の全戸）">＋個別通知</button>
-          <span class="reach">到達率 <b id="kgi-reach">--</b></span>
+        <div class="krow">
+          <div class="kv2"><span class="v" id="kgi-goui">--</span><span class="l">合意率（黙認込み）</span></div>
+          <div class="kv2"><span class="v" id="kgi-mokunin">--</span><span class="l">黙認＝合意率−同意率</span></div>
+          <button type="button" id="consent-open" class="detail" title="推定の中身（説明設計・係数・感度・出典）を地図の上に重ねて開きます。閉じれば元の画面に戻ります">説明計画詳細 ▸</button>
         </div>
       </div>
       <div id="gauge-block">
-        <div class="gauge-head"><span class="gauge-title">① 説明充足率<span class="sub" style="font-weight:400;font-size:10.5px;margin-left:4px">（実測）</span></span><span id="gauge-chip" title="説明充足率の定義">ⓘ 説明充足率とは</span></div>
+        <div class="gauge-head knob-head"><span class="knob-no">①</span><span class="gauge-title">説明充足率</span><span class="tag tag-real">実測</span><span id="gauge-chip" title="説明充足率の定義">ⓘ 説明充足率とは</span></div>
         <div id="gauge-value"><span class="starmark">★</span><span id="gauge-pct">--</span>%</div>
         <div class="gauge-track-wrap">
           <div class="gauge-track">
@@ -881,6 +906,17 @@
         </div>
         <div id="recipe-msg" class="note" style="margin:-4px 0 4px;line-height:1.35;"></div>
         <div id="faq-list"></div>
+      </div>
+
+      <!-- ★ツマミ②＝到達率（周知の手段）。①と同じ見出しの型で並べる（2026-09-04 本人指摘：①だけ特別扱いしない） -->
+      <div id="reach-block">
+        <div class="knob-head"><span class="knob-no">②</span><span class="gauge-title">到達率</span><span class="tag">推定</span><span class="knob-val">到達率 <b id="kgi-reach">--</b></span></div>
+        <div class="btn-group" id="kgi-media">
+          <span class="lbl">周知の手段</span>
+          <button type="button" data-m="shiho" class="active" title="市報さいたま のみ（いまの運用）">市報のみ</button>
+          <button type="button" data-m="kairan" title="市報＋HP＋SNS＋自治会の回覧板">＋回覧板</button>
+          <button type="button" data-m="kobetsu" title="上に加えて個別通知を投函（近隣・周辺の全戸）">＋個別通知</button>
+        </div>
       </div>
 
       <div id="line-result">
@@ -1129,7 +1165,7 @@
 <div id="consent-overlay">
   <div id="co-card">
     <div id="co-bar">
-      <b>係数と出典（推定の中身）</b>
+      <b>説明計画詳細</b>
       <span id="co-ctx">—</span>
       <span id="co-close">× 地図に戻る</span>
     </div>
@@ -1679,6 +1715,7 @@ async function boot() {
   refreshPanel();
   loading.style.display = "none";
   kgiLoad();   // KGI帯の推定モデルとコホートを先読み（線を動かした瞬間に数字が出るように）
+  setTimeout(() => { try { CO.preload(); } catch (e) { console.warn("consent の先読みに失敗", e); } }, 1500);
 }
 
 function mapReady() {
@@ -4128,8 +4165,12 @@ function renderKGI() {
   const box = document.getElementById("kgi");
   if (!KGI_ON || !box) return;
   const $ = id => document.getElementById(id);
-  const set = (d, g, m, r) => { $("kgi-doui").textContent = d; $("kgi-goui").textContent = g;
-                                $("kgi-mokunin").textContent = m; $("kgi-reach").textContent = r; };
+  const set = (d, g, m, r, dv) => { $("kgi-doui").textContent = d; $("kgi-goui").textContent = g;
+                                    $("kgi-mokunin").textContent = m; $("kgi-reach").textContent = r;
+                                    $("kgi-fill").style.width = (dv == null ? 0 : Math.min(100, dv * 100)) + "%";
+                                    $("kgi-gap").textContent = dv == null ? "—"
+                                      : (dv >= 2 / 3 ? "2/3 に到達（＋" + ((dv - 2 / 3) * 100).toFixed(1) + "）"
+                                                     : "2/3 まで あと " + ((2 / 3 - dv) * 100).toFixed(1) + " ポイント"); };
   if (offsetM === 0) { set("--", "--", "--", "--"); $("kgi-ctx").textContent = "線を動かすと推定します"; return; }
   if (offsetM > 0) {
     set("--", "--", "--", "--");
@@ -4145,16 +4186,15 @@ function renderKGI() {
   const plan = Object.assign({}, kgiModel.BASE_PLAN, { media: KGI_MEDIA[kgiMedia], answered: Object.assign({}, answered) });
   const e = kgiModel.estimate(co, plan, kgiModel.CO);
   const pc = x => (x * 100).toFixed(1) + "%";
-  set(pc(e.douiAll), pc(e.agree), pc(Math.max(0, e.agree - e.douiAll)), pc(e.reach));
+  set(pc(e.douiAll), pc(e.agree), pc(Math.max(0, e.agree - e.douiAll)), pc(e.reach), e.douiAll);
   const s = satisfaction();
-  $("kgi-ctx").textContent = "商業を" + Math.round(-offsetM) + "m後退 ／ 説明対象 " + co.length + "棟 ／ 充足率 "
-    + (s && s.total ? (s.ok / s.total * 100).toFixed(1) + "%" : "--") + "（実測）"
+  $("kgi-ctx").textContent = "商業を" + Math.round(-offsetM) + "m後退 ／ 説明対象 " + co.length + "棟"
     + (n.diff > 0 ? " ／ 断面 " + (-Number(n.key)) + "m" : "");
 }
 
 (function () {
   const box = document.getElementById("kgi");
-  if (!KGI_ON) { box.classList.add("off"); return; }
+  if (!KGI_ON) { box.classList.add("off"); document.getElementById("reach-block").classList.add("off"); return; }
   document.querySelectorAll("#kgi-media button[data-m]").forEach(b => {
     b.addEventListener("click", () => {
       kgiMedia = b.dataset.m;
@@ -4166,17 +4206,20 @@ function renderKGI() {
 
 const CO = {
   el: null, frame: null, loaded: false,
-  open() {
+  /* ★起動時に裏で読んでおく（2026-09-04 本人指摘「クリックして遷移にラグがある」）。
+     consent 側の初回 solve（ビーム探索・約3秒）を、ボタンを押す前に済ませておく */
+  preload() {
     this.el = this.el || document.getElementById("consent-overlay");
     this.frame = this.frame || document.getElementById("co-frame");
+    if (this.loaded) return;
+    this.loaded = true;
+    this.frame.addEventListener("load", () => this.push());
+    this.frame.src = "consent.html?embed=1";
+  },
+  open() {
+    this.preload();
     this.el.classList.add("open");
-    if (!this.loaded) {
-      this.loaded = true;
-      this.frame.addEventListener("load", () => this.push());
-      this.frame.src = "consent.html?embed=1";
-    } else {
-      this.push();
-    }
+    this.push();
     this.ctx();
   },
   close() { if (this.el) this.el.classList.remove("open"); },
