@@ -843,8 +843,16 @@
         <div id="faq-list"></div>
       </div>
 
+      <div id="line-result">
+        <div class="section-title">線を動かした結果</div>
+        <div id="line-note" class="note" style="margin-bottom:8px;">
+          地図上の<b>太い線</b>をマウスでつまんで動かしてください。
+        </div>
+        <div id="line-stats"></div>
+      </div>
+
       <div id="agg-result">
-        <div class="section-title">線を動かした結果の説明対象（合計）</div>
+        <div class="section-title">↳ その結果、説明対象になる棟（合計）</div>
         <div id="jourei-chip2" style="display:none"></div>
         <div id="agg-stats"></div>
       </div>
@@ -855,14 +863,6 @@
         <button id="shincho-btn" type="button" class="active">↩ 現況に戻す（新庁舎を消す）</button>
         <div id="shincho-chip">🏛 新庁舎の建築計画（クリックで説明）</div>
         <div id="jou-stats"></div>
-      </div>
-
-      <div id="line-result">
-        <div class="section-title">線を動かした結果</div>
-        <div id="line-note" class="note" style="margin-bottom:8px;">
-          地図上の<b>太い線</b>をマウスでつまんで動かしてください。
-        </div>
-        <div id="line-stats"></div>
       </div>
 
       <div>
@@ -2727,11 +2727,11 @@ function renderLineStats() {
   }
   html += '<div class="note" style="margin-top:8px;">' +
     '既存不適格の判定は<b>高度地区（20ｍ地区）の絶対高さ</b>と実測の建物高さの比較。' +
-    '敷地面積を使わないので推定を含まない。' +
     '<br><b>用途上の制限</b>は建築基準法 <b>別表第二（へ）項</b>（第二種住居地域）。'+
     'PLATEAUの <code>bldg:usage</code> は17分類で<b>作業場の床面積・倉庫業を営むかまでは分からない</b>ため、'+
     '機械で判定できるのは<b>10,000㎡超の店舗</b>だけ。工場・運輸倉庫施設・作業所併用住宅は<b>要確認</b>として別に数えている。' +
-    '<br>許容延床の倍率は 容積率÷建蔽率 の比（400/80 ÷ 200/60）。建築面積が約分で消えるため敷地面積を必要としない。' +
+    '<br>許容延床の倍率は 容積率÷建蔽率 の比（400/80 ÷ 200/60）。' +
+    '<b>どちらの判定も敷地面積を使わない</b>（建築面積が約分で消える）ので、推定を含まない。' +
     '</div>';
   el.innerHTML = html;
 }
@@ -3310,13 +3310,15 @@ let aggCache = null;
 
 function computeAggregate() {
   if (offsetM === 0) { aggCache = null; return; }
-  const subjects = [];
+  const subjects = [];      // 後退側：中高層条例の当事者（15m・高さの2倍・冬至日の日影が引ける）
+  const crossers = [];      // 拡大側：用途地域そのものが変わる当事者（条例の層は引けない）
   lineTargets.forEach(t => {
     const st = classify(t); if (!st) return;
     if (offsetM < 0) {
       // 商業を後退：高さの上限を超える棟＝説明が要る側の当事者
       if (st.state === "over") subjects.push({ f: t.f, h: Number(t.p.h) });
     } else {
+      if (st.state === "freed") crossers.push({ f: t.f, capNow: t.capNow });
       /* ★商業を拡大：当事者は立たない（2026-09-04 に条件を見直した）。
          旧コードは `st.state === "freed" && h > t.cap` としていたが、
          t.cap は capAcrossLine＝常に住居側の上限なので、これは
@@ -3351,6 +3353,16 @@ function computeAggregate() {
     const sk = sj.f.properties.grp || sj.f.properties.id;
     all.add(sk); addT(sk, "subject", sj.f);
   });
+  /* ★拡大側（2026-09-04）。用途地域が変わるのは線を越えた棟そのもの＝当事者。
+     この層の論点（t1 制度／t2 資産価値／t3 同じ規模／t4 事業継続／t6 商業地として／t8 直後から）は
+     建て替え後の高さを仮定しなくても確定する＝実測のまま数えられる。
+     ★近隣住民ア・イ・周辺住民は立てない。あれは「外壁から高さの2倍」「冬至日の日影」を要求し、
+     まだ建っていない建物の高さが要るため（＝推定になる）。だから分母の意味が両側で違う。
+     後退側＝中高層条例の説明対象／拡大側＝用途地域変更の当事者。パネルに明記している。 */
+  crossers.forEach(cr => {
+    const k = cr.f.properties.grp || cr.f.properties.id;
+    all.add(k); addT(k, "subject", cr.f);
+  });
   /* ★層は重ならないように整理してから数える。
      1棟が、ある当事者にとっては近隣住民ア、別の当事者にとっては周辺住民、
      ということが起きる。そのまま set1/set2/set3 の大きさを足すと二重に数える
@@ -3374,7 +3386,7 @@ function computeAggregate() {
       g.add(k);
       if (t.capNow != null) cg.add(k);
     });
-    aggCache.expand = { n: nf, grp: g.size, capGone: cg.size };
+    aggCache.expand = { n: nf, grp: g.size, capGone: cg.size, subj: aggCache.topics.size };
   }
 }
 
@@ -3388,15 +3400,17 @@ function renderAggregate() {
   if (a.expand) {
     /* ★拡大側。0を並べると「計算していない」ように見えるので、言えることと言えない理由を出す。 */
     el.innerHTML =
-      kv("線を越えた棟", a.expand.n.toLocaleString() + " 棟（複合体 " + a.expand.grp.toLocaleString() + "）") +
-      kv("<b>高さの上限が外れる</b>", "<b>" + a.expand.capGone.toLocaleString() + " 複合体</b>") +
-      kv('<span class="who wS"></span>条例の説明対象', "<b>この操作では出せません</b>") +
-      '<div class="note" style="margin-top:6px;"><b>条例の説明義務は、用途地域の変更ではなく個々の建築計画に紐づきます。</b>'
-      + '拡大側は天井が外れるだけで、<b>何mで建て替わるかが決まっていない</b>ため、'
-      + '「外壁から高さの2倍」も「冬至日の日影」も引けません。'
-      + '<b>ここを埋めるには建て替え後の高さを仮定する必要があり、それは実測ではなく推定になります。</b>'
-      + 'この画面は推定を混ぜない方針なので、空欄のままにしています。<br>'
-      + '説明対象が出るのは<b>後退側</b>——既存不適格になる棟は<b>いまの高さが実測でわかっている</b>ためです。</div>';
+      /* ★棟数と「天井が外れる」は真上の「線を動かした結果」に出ている。ここには出さない
+         （2026-09-04 本人指摘。同じ数字が右帯に二度出ていた）。 */
+      kv('<span class="who wS"></span><b>用途地域が変わる当事者＝説明対象</b>',
+         "<b>" + a.expand.subj.toLocaleString() + " 複合体</b>") +
+      kv('<span class="who wA"></span>近隣住民・周辺住民（中高層条例）', "<b>この操作では出せません</b>") +
+      '<div class="note" style="margin-top:6px;">'
+      + '<b>条例の説明義務は、用途地域の変更ではなく個々の建築計画に紐づきます。</b>'
+      + '拡大側は天井が外れるだけで<b>何mで建て替わるかが決まっていない</b>ため、'
+      + '「外壁から高さの2倍」も「冬至日の日影」も引けません（＝建て替え後の高さを仮定する推定になる）。'
+      + '近隣・周辺まで出せるのは<b>後退側</b>——既存不適格になる棟は<b>いまの高さが実測でわかっている</b>ためです。<br>'
+      + '<b>拡大側の当事者は全員が同じ6つの疑問を持つ</b>ので、説明充足率は<b>0%か100%のどちらか</b>にしかなりません。</div>';
     return;
   }
   el.innerHTML =
@@ -3613,9 +3627,9 @@ function renderFaq() {
        拡大側は当事者が0なので、t6 はこの画面では最後まで効かない（2026-09-04 追記）。 */
     const live = !aggCache || !aggCache.topics ? true
       : Array.from(aggCache.topics.values()).some(set => set.has(t.id));
-    /* 拡大側は8つとも生じない。1行ずつ注記すると煩いので、淡くするだけにして
-       理由はゲージ側（「拡大側は分母が立ちません」）に1回だけ出す。 */
-    const bulk = !!(aggCache && aggCache.expand);
+    /* 拡大側は当事者だけが立つので、生じないのは t5（住宅地として）と t7（日当たり）の2つ。
+       t7 が出ないのは、まだ建っていない建物の日影は引けないため。 */
+    const bulk = !!(aggCache && aggCache.topics && aggCache.topics.size === 0);
     if (!live) row.classList.add("inactive");
     row.innerHTML = '<span class="box">' + (answered[t.id] ? "✓" : "") + "</span>" +
       '<span>' + badge + '<span class="txt-id">' + t.from + "</span>" + t.text +
