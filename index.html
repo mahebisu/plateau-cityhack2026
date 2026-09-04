@@ -171,6 +171,8 @@
   }
   .faq-row.answered .box { background: var(--green); border-color: var(--green); }
   .faq-row.answered { color: var(--sub); }
+  /* いま誰にも生じていない論点＝押しても充足率が動かない（2026-09-04） */
+  .faq-row.inactive { opacity: .5; }
   .faq-row .txt-id {
     display: inline-block; font-size: 10px; color: var(--sub);
     border: 1px solid var(--line); border-radius: 3px;
@@ -3606,8 +3608,18 @@ function renderFaq() {
     const row = document.createElement("div");
     row.className = "faq-row " + (answered[t.id] ? "answered" : "unanswered");
     const badge = (recipeSet && recipeSet.has(t.id)) ? '<span class="min-badge">最低限</span>' : "";
+    /* ★いま誰にも生じていない論点は、押しても数字が動かない。その理由を出す。
+       t5/t6 は線の向き（envTopic）で入れ替わり、t3/t4/t8 は当事者にしか生じない。
+       拡大側は当事者が0なので、t6 はこの画面では最後まで効かない（2026-09-04 追記）。 */
+    const live = !aggCache || !aggCache.topics ? true
+      : Array.from(aggCache.topics.values()).some(set => set.has(t.id));
+    /* 拡大側は8つとも生じない。1行ずつ注記すると煩いので、淡くするだけにして
+       理由はゲージ側（「拡大側は分母が立ちません」）に1回だけ出す。 */
+    const bulk = !!(aggCache && aggCache.expand);
+    if (!live) row.classList.add("inactive");
     row.innerHTML = '<span class="box">' + (answered[t.id] ? "✓" : "") + "</span>" +
-      '<span>' + badge + '<span class="txt-id">' + t.from + "</span>" + t.text + "</span>";
+      '<span>' + badge + '<span class="txt-id">' + t.from + "</span>" + t.text +
+      (live || bulk ? "" : '<span class="txt-id" style="margin-left:6px">いまは誰にも生じていない</span>') + "</span>";
     row.addEventListener("click", () => {
       answered[t.id] = !answered[t.id];
       faqTouched = true;              // 以後、線を動かしても勝手に解き直さない
@@ -3626,7 +3638,15 @@ function renderGauge() {
   const th = document.getElementById("threshold-list");
   if (!sat || sat.total === 0) {
     pct.textContent = "--"; fill.style.width = "0%"; dot.style.left = "0%";
-    th.innerHTML = '<div class="th-row"><span class="lbl">線を動かすと計算します</span></div>';
+    /* ★拡大側は線を動かしても分母が立たない。
+       説明充足率＝未回答の論点を1つも持たない棟 ÷ 説明対象になった棟。
+       拡大側は説明対象が機械的に決められない（＝分母0）ので、率そのものが定義できない。
+       ここで「線を動かすと計算します」と出すと、動かしているのに嘘になる（2026-09-04 修正）。 */
+    th.innerHTML = (aggCache && aggCache.expand)
+      ? '<div class="th-row"><span class="lbl">拡大側は分母が立ちません</span></div>'
+        + '<div class="th-row"><span class="lbl" style="font-weight:400">説明対象になった棟が0のため、'
+        + '「未回答の論点を1つも持たない棟 ÷ 説明対象」が計算できません</span></div>'
+      : '<div class="th-row"><span class="lbl">線を動かすと計算します</span></div>';
     return;
   }
   const r = sat.ok / sat.total, p = r * 100;
