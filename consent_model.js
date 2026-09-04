@@ -291,7 +291,7 @@ function estimate(cohort, plan, co) {
   const faceShare = co.faceShareBase * (plan.async ? 1 - co.asyncTake : 1);
   let face = 0;
 
-  let sumP = 0, sumR = 0, sumAgree = 0;
+  let sumP = 0, sumR = 0, sumAgree = 0, sumRP = 0;
   const byLayer = {};
   cohort.forEach(r => {
     // 情報開示＝その棟が持つ論点のうち回答済みの割合（★説明充足率の連続版）
@@ -327,16 +327,21 @@ function estimate(cohort, plan, co) {
     let tu = 0; r.topics.forEach(t => { if (!ans[t]) tu++; });
     face += R * faceShare * (1 + co.repeatAmp * (tot ? tu / tot : 0));
 
-    sumP += P; sumR += R; sumAgree += agree;
+    sumP += P; sumR += R; sumAgree += agree; sumRP += R * P;
     const L = r.layer;
-    byLayer[L] = byLayer[L] || { n: 0, p: 0, r: 0, a: 0 };
-    byLayer[L].n++; byLayer[L].p += P; byLayer[L].r += R; byLayer[L].a += agree;
+    byLayer[L] = byLayer[L] || { n: 0, p: 0, r: 0, a: 0, rp: 0 };
+    byLayer[L].n++; byLayer[L].p += P; byLayer[L].r += R; byLayer[L].a += agree; byLayer[L].rp += R * P;
     r._P = P; r._R = R; r._SA = SA; r._PF = PF; r._DF = DF; r._Info = Info;
   });
   const n = cohort.length;
   return {
     n, U, bPF, bCE, PF_common: { Part, Repr, Ctrl }, Eff, Rshuu,
     nattoku: sumP / n, reach: sumR / n, agree: sumAgree / n,
+    /* ★2026-09-04 KGI＝同意率。分母は条文に合わせて2通り（REQ_doui_kgi_20260904.md D3）
+       douiAll     ＝ Σ(R×P)/n  … 全員分母（都再法14条・区分所有法62条型）＝KGI
+       douiReached ＝ ΣP/n      … 到達者分母（区分所有法17条・31条・円滑化法9条2項型）＝旧・納得率と同値
+       agree（合意率・黙認込み）は残す。恒等式 agree − douiAll ＝ q0×(1−reach) */
+    douiAll: sumRP / n, douiReached: sumP / n,
     face: face, facePer: face / n, faceShare: faceShare,
     tvdAge: tvdAge, tvdSex: rc.tvdSex,
     byLayer
@@ -432,13 +437,16 @@ const BASE_PLAN = {
      いまの目標では総当たりと一致する。合わなくなったら BEAM を上げる。
    ======================================================================= */
 const BEAM = { perCost: 4, total: 60, maxDepth: 14 };
+/* ★2026-09-04 解く指標。既定＝ KGI の同意率（全員分母）。"agree" を渡せば旧来の合意率で解く */
+const SOLVE_METRIC = "douiAll";
 
-function solveOne(cohort, goal, startPlan, startUsed) {
+function solveOne(cohort, goal, startPlan, startUsed, metric) {
+  metric = metric || SOLVE_METRIC;
   const key = u => Object.keys(u).sort().join(",");
   const mk = (plan, cost, used, steps, e) => ({ plan, cost, used, steps, e });
   let frontier = [mk(Object.assign({}, startPlan, { media: startPlan.media.slice() }),
                     0, Object.assign({}, startUsed), [], estimate(cohort, startPlan))];
-  if (frontier[0].e.agree >= goal - 1e-9) return { steps: [], cost: 0, e: frontier[0].e, reached: true };
+  if (frontier[0].e[metric] >= goal - 1e-9) return { steps: [], cost: 0, e: frontier[0].e, reached: true };
   let best = null, seen = {};
   for (let d = 0; d < BEAM.maxDepth && frontier.length; d++) {
     const kids = [];
@@ -452,9 +460,10 @@ function solveOne(cohort, goal, startPlan, startUsed) {
         const plan = Object.assign({}, st.plan, m.apply(st.plan));
         const e = estimate(cohort, plan);
         const steps = st.steps.concat([{ id: m.id, label: m.label, why: m.why, cost: m.cost,
-          cumCost: cost, agree: e.agree, nattoku: e.nattoku, reach: e.reach, face: e.face }]);
+          cumCost: cost, agree: e.agree, nattoku: e.nattoku, reach: e.reach, face: e.face,
+          douiAll: e.douiAll, douiReached: e.douiReached }]);
         const node = mk(plan, cost, used, steps, e);
-        if (e.agree >= goal - 1e-9) { if (!best || cost < best.cost) best = node; }
+        if (e[metric] >= goal - 1e-9) { if (!best || cost < best.cost) best = node; }
         else kids.push(node);
       });
     });
@@ -464,7 +473,7 @@ function solveOne(cohort, goal, startPlan, startUsed) {
     frontier = [];
     Object.keys(byCost).map(Number).sort((x, y) => x - y).forEach(c => {
       if (best && c >= best.cost) return;
-      byCost[c].sort((x, y) => y.e.agree - x.e.agree);
+      byCost[c].sort((x, y) => y.e[metric] - x.e[metric]);
       frontier = frontier.concat(byCost[c].slice(0, BEAM.perCost));
     });
     frontier.sort((x, y) => x.cost - y.cost);
@@ -477,7 +486,8 @@ function solveOne(cohort, goal, startPlan, startUsed) {
 
 /* 目標を順に追う。2/3に届いた状態から3/4を、そこから4/5を追う。
    ＝「2/3にはこれ、4/5にはさらにこれ」が1本の道として出る。 */
-function solve(cohort, targets, startPlan) {
+function solve(cohort, targets, startPlan, metric) {
+  metric = metric || SOLVE_METRIC;
   const sorted = targets.slice().sort((a, b) => a - b);
   let plan = Object.assign({}, startPlan || BASE_PLAN);
   plan.media = plan.media.slice();
@@ -486,17 +496,18 @@ function solve(cohort, targets, startPlan) {
   let cur = start;
   const marks = [];
   for (const goal of sorted) {
-    if (cur.agree >= goal - 1e-9) {
+    if (cur[metric] >= goal - 1e-9) {
       marks.push({ target: goal, reached: true, atStep: steps.length, cost: cost });
       continue;
     }
-    const r = solveOne(cohort, goal, plan, used);
+    const r = solveOne(cohort, goal, plan, used, metric);
     if (!r.reached) { marks.push({ target: goal, reached: false, atStep: null, cost: null }); break; }
     r.steps.forEach(st => { st.cumCost += cost; st.forGoal = goal; steps.push(st); });
     plan = r.plan; used = r.used; cost += r.cost; cur = r.e;
     marks.push({ target: goal, reached: true, atStep: steps.length, cost: cost });
   }
-  return { start: { agree: start.agree, nattoku: start.nattoku, face: start.face },
+  return { metric, start: { agree: start.agree, nattoku: start.nattoku, face: start.face,
+                    douiAll: start.douiAll, douiReached: start.douiReached },
            steps, marks, plan, cost, final: cur,
            reached: marks.length > 0 && marks[marks.length - 1].reached };
 }
@@ -648,5 +659,5 @@ if (IS_NODE && require.main === module) {
 }
 
 const API = { CO, MEDIA, BENEFIT, OWNER_P, VOICE, RECRUIT, LOSS_TOPICS, DEFAULT_ANSWERED,
-               DEFAULT_PLAN, SENS_KEYS, MEASURES, BASE_PLAN, buildCohort, estimate, sensitivity, solve };
+               DEFAULT_PLAN, SENS_KEYS, MEASURES, BASE_PLAN, SOLVE_METRIC, buildCohort, estimate, sensitivity, solve };
 if (IS_NODE) module.exports = API; else window.ConsentModel = API;

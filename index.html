@@ -607,7 +607,7 @@
   #pc-gate { background: rgba(47,72,88,.92); color: #ffe4e0; }
 
   /* ★導入オーバーレイ（2026-09-04 本人指示）＝「開いた瞬間に、この画面が何なのかを説明する」。
-     発表ではこの5枚が導入88秒（台本v5 A-1〜A-5）の画面になり、そのまま地図へ抜ける。
+     発表ではこの3枚が導入88秒（台本v5 A-1〜A-5）の画面になり、そのまま地図へ抜ける。
      ⚠ 地図の読み込みは止めない。裏で boot() が走り、「はじめる」を押した時点で操作できる。
      ⚠ z-index は 90。#pc-gate（100）より下＝スマホでは案内が優先される。
      ⚠ 文字はコーラル地の上に置かない（#2f4858 で 3.70:1＝AA未達）。白いカードの上に置く。 */
@@ -620,33 +620,89 @@
   #intro .card {
     background: #fff; color: #2f4858; border-radius: 14px;
     width: 80vw; height: 80vh; max-width: 100%; max-height: calc(100vh - 48px);
-    padding: 34px 46px 22px; box-sizing: border-box;
+    padding: 30px 46px 18px; box-sizing: border-box;
     display: flex; flex-direction: column; overflow: hidden;
     box-shadow: 0 18px 48px rgba(47,72,88,.28);
   }
   #intro .pages { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
   #intro .pg { display: none; }
-  #intro .pg.on { display: block; }
-  #intro .kicker { font-size: 13.5px; color: #0059a8; font-weight: 700; letter-spacing: .04em; margin-bottom: 10px; }
-  #intro h2 { margin: 0 0 18px; font-size: 31px; line-height: 1.45; color: #2f4858; }
-  #intro h2 .lead { display: block; font-size: 40px; margin-bottom: 6px; }
-  #intro p { margin: 0 0 15px; font-size: 18px; line-height: 1.95; }
+  #intro .pg.on { display: flex; flex-direction: column; height: 100%; }
+
+  /* ===== ★本人指定のサイズ体系（pt → px は ×4/3） ===== */
+  /*  48pt=64px（主）／36pt=48px（副）／18pt=24px（説明）／12pt=16px（注釈）  */
+  #intro .kicker { font-size: 16px; color: #0059a8; font-weight: 700; letter-spacing: .04em; margin-bottom: 4px; }
+  #intro h2 { margin: 0 0 6px; font-size: 64px; line-height: 1.2; letter-spacing: -.01em; color: #2f4858; font-weight: 700; }
+  #intro h2 .sub { display: block; font-size: 48px; line-height: 1.22; margin-top: 6px; font-weight: 700; }
+  /* ★図は「残った高さ」に自分を合わせる（幅を固定すると必ず溢れる） */
+  #intro .body { display: flex; gap: 24px; align-items: stretch; flex: 1 1 auto; min-height: 0; }
+  #intro .body .txt { flex: 1 1 auto; min-width: 0; }
+  #intro .body .fig { flex: 0 0 264px; height: 100%; display: flex; align-items: center; }
+  #intro .body .fig svg, #intro .body .fig img { height: 100%; width: 100%; object-fit: contain; display: block; }
+  #intro.nofig .body .fig { display: none; }
+  /* ★S3だけ figure を「使い方 ①②③」に使う */
+  #intro .howto { flex-direction: column; justify-content: center; gap: 12px; }
+  /* ★三段（実測→推定→推定）。数量は描かない——棒の長さがデータに見えるため */
+  #intro .ladder { flex-direction: column; justify-content: center; gap: 2px; }
+  #intro .lr { border-radius: 9px; padding: 9px 12px; border: 2px solid; }
+  #intro .lr.m { border-color: #ff7675; background: #fff4f2; }
+  #intro .lr.e { border-color: #2f4858; background: #eef1f3; }
+  #intro .lr i {
+    font-style: normal; font-size: 12px; font-weight: 700; color: #fff;
+    border-radius: 5px; padding: 2px 7px; margin-right: 8px; vertical-align: 2px;
+  }
+  #intro .lr.m i { background: #ff7675; }
+  #intro .lr.e i { background: #2f4858; }
+  #intro .lr b { font-size: 19px; color: #2f4858; }
+  #intro .lr span { display: block; font-size: 13px; color: #5b6470; margin-top: 3px; }
+  /* ★三つの数字の定義（全幅3行） */
+  #intro .defs { display: flex; flex-direction: column; gap: 4px; }
+  #intro .dr {
+    display: flex; align-items: center; gap: 12px;
+    border-radius: 8px; padding: 4px 11px; border: 2px solid;
+  }
+  #intro .dr.m { border-color: #ff7675; background: #fff4f2; }
+  #intro .dr.e { border-color: #2f4858; background: #eef1f3; }
+  #intro .dr i {
+    flex: 0 0 auto; font-style: normal; font-size: 12px; font-weight: 700; color: #fff;
+    border-radius: 5px; padding: 3px 8px;
+  }
+  #intro .dr.m i { background: #ff7675; }
+  #intro .dr.e i { background: #2f4858; }
+  #intro .dr.h { border-color: #9aa7b1; background: #f2f5f7; }
+  #intro .dr.hi { box-shadow: 0 0 0 3px #ffd5d2; }
+  #intro .dr.h i { background: #9aa7b1; }
+  #intro .dr em {
+    flex: 0 0 auto; font-style: normal; width: 22px; height: 22px; border-radius: 50%;
+    background: #2f4858; color: #fff; font-size: 13px; font-weight: 700; text-align: center; line-height: 22px;
+  }
+  #intro .dr.m em { background: #ff7675; }
+  #intro .dr b { flex: 0 0 128px; font-size: 17px; color: #2f4858; }
+  #intro .dr span { flex: 1 1 auto; font-size: 13px; line-height: 1.35; color: #5b6470; }
+  #intro .dr span b { flex: none; font-size: 14px; color: #0059a8; }
+  #intro .dr u { flex: 0 0 96px; text-decoration: none; font-size: 15px; font-weight: 700; color: #2f4858; text-align: right; }
+  #intro .dr u.v { flex: 0 0 72px; font-size: 19px; }
+  #intro .dr u small { font-size: 14px; }
+  #intro .ar { text-align: center; font-size: 15px; color: #b9c4cb; line-height: 1.1; }
+  #intro .small em {
+    font-style: normal; display: inline-block; width: 18px; height: 18px; border-radius: 50%;
+    background: #ff7675; color: #fff; font-size: 11px; font-weight: 700;
+    text-align: center; line-height: 18px; margin: 0 4px 0 2px;
+  }
+  #intro .ht { display: flex; align-items: center; gap: 11px; }
+  #intro .ht svg { flex: 0 0 52px; width: 52px; height: 44px; }
+  #intro .ht span { font-size: 17px; line-height: 1.35; font-weight: 700; color: #2f4858; }
+  #intro .ht i {
+    display: inline-block; width: 21px; height: 21px; border-radius: 50%;
+    background: #ff7675; color: #fff; font-size: 13px; font-style: normal; font-weight: 700;
+    text-align: center; line-height: 21px; margin-right: 7px; vertical-align: 1px;
+  }
+  #intro p { margin: 0 0 14px; font-size: 24px; line-height: 1.6; }
   #intro b { color: #0059a8; }
-  #intro ol { margin: 0 0 13px; padding-left: 0; list-style: none; counter-reset: st; }
-  #intro ol li {
-    counter-increment: st; position: relative; padding: 11px 0 11px 52px;
-    font-size: 18px; line-height: 1.8; border-top: 1px solid #ffe4e0;
-  }
-  #intro ol li:first-child { border-top: 0; }
-  #intro ol li::before {
-    content: counter(st); position: absolute; left: 4px; top: 11px;
-    width: 31px; height: 31px; border-radius: 50%; background: #ff7675; color: #fff;
-    font-size: 16px; font-weight: 700; text-align: center; line-height: 31px;
-  }
-  #intro .small { font-size: 14px; line-height: 1.85; color: #5b6470; }
+  #intro .small { font-size: 16px; line-height: 1.54; color: #5b6470; margin: 0; }
+  #intro .foot { flex: 0 0 auto; padding-top: 10px; }
   #intro .bar {
     flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
-    margin-top: 16px; padding-top: 14px; border-top: 1px solid #ffe4e0;
+    margin-top: 8px; padding-top: 10px; border-top: 1px solid #ffe4e0;
   }
   #intro .dots { display: flex; gap: 6px; margin-right: auto; }
   #intro .dots i { width: 9px; height: 9px; border-radius: 50%; background: #ffd5d2; display: block; }
@@ -656,9 +712,21 @@
     border: 1px solid #c9d3da; background: #fff; color: #2f4858;
   }
   #intro button.primary { background: #0059a8; border-color: #0059a8; color: #fff; font-weight: 700; }
-  #intro button:hover { filter: brightness(.97); }
   #intro button[disabled] { opacity: .35; cursor: default; }
+
+  #intro button:hover { filter: brightness(.97); }
   #intro .skip { font-size: 13px; color: #5b6470; background: none; border: 0; padding: 4px 6px; }
+  /* ★背の低い窓（ブラウザのタブ・ブックマーク込みなど）でだけ全体を1段落とす。
+     本番のF11全画面（768px）はこの分岐に入らないので、48pt/36ptのまま。 */
+  @media (max-height: 700px) {
+    #intro h2 { font-size: 52px; }
+    #intro h2 .sub { font-size: 40px; }
+    #intro .dr { padding: 2px 11px; }
+    #intro .defs { gap: 3px; }
+    #intro .dr b { font-size: 16px; }
+    #intro .dr u.v { font-size: 18px; }
+    #intro p { font-size: 22px; }
+  }
 
 </style>
 </head>
@@ -809,7 +877,7 @@
       <button id="consent-open" type="button"
         title="いまの用途地域境の位置と、上のチェックの状態をそのまま渡します。地図の上に重ねて開くので、閉じれば元の画面に戻ります">
         <span class="co-ic">◱</span>
-        <span class="co-tx"><b>納得率シミュレータをひらく</b>
+        <span class="co-tx"><b>同意率シミュレータをひらく</b>
           <span class="co-sub">ここまでは<b>実測</b>。この先は<b>推定</b>です</span></span>
       </button>
 
@@ -841,57 +909,52 @@
   <div class="card">
     <div class="pages">
 
-      <div class="pg on">
-        <div class="kicker">PLATEAU CityHack Challenge 2026 ／ 対象自治体＝さいたま市</div>
-        <h2><span class="lead">合意形成の風洞実験</span>説明会を、開く前に開く。</h2>
-        <p>用途地域の境界を1本動かすと、<b>高さの制限が変わって既存不適格になる建物</b>と、
-          <b>条例上、市が説明しなければならない相手方</b>が、棟の数で出ます。</p>
-        <p class="small">大宮駅・さいたま新都心駅の徒歩15分圏 25,467棟。ブラウザだけで動きます（MapLibre GL JS）。</p>
+      <div class="pg on" data-t="0:00–0:19 ＋ 1:09–1:15（A-1 土下座／A-4 名乗り）">
+        <div class="kicker">PLATEAU CityHack Challenge 2026 ／ チーム ボスケテ ／ 対象＝さいたま市</div>
+        <h2>説明会を、開く前に開く。<span class="sub">合意形成の風洞実験</span></h2>
+        <div class="body">
+          <div class="txt">
+            <p>用途地域の境界を1本動かすと、<b>高さの制限が変わって既存不適格になる建物</b>と、<b>条例上、市が説明しなければならない相手方</b>が、棟の数で出ます。</p>
+          </div>
+          <div class="fig"><img src="img/intro1_windtunnel.png" alt=""></div>
+        </div>
+        <div class="foot">
+          <p class="small">大宮駅・さいたま新都心駅の徒歩15分圏 25,467棟／ブラウザだけで動きます（MapLibre GL JS）。<b>推奨は出しません。決めるのは市です。</b></p>
+        </div>
       </div>
 
-      <div class="pg">
+      <!-- ===================== S2 ===================== -->
+      <div class="pg" data-t="0:19–0:49（A-2）">
         <div class="kicker">なぜ作ったか</div>
-        <h2>足りていないのは、<br>その結果を住民に説明する側の道具です。</h2>
-        <p>PLATEAUでは洪水も地震も、<b>シミュレーションはもう十分にあります。</b></p>
-        <p>けれど説明会に来るのは、属性の偏った一部の市民です。
-          <b>その人たちが何を、どの順番で理解するのか——再現できる道筋がありません。</b></p>
-        <p class="small">住民説明会は、開いてみるまで何が起きるか分からない。開く前に、
-          条例が要求している説明の範囲と、まだ答えていない論点を確定させます。</p>
+        <h2>足りないのは、<br>説明する側の道具。</h2>
+        <div class="body">
+          <div class="txt">
+            <p>PLATEAUでは洪水も地震も、<b>シミュレーションはもう十分あります。</b>説明会に来るのは属性の偏った一部の市民です。<b>その人たちが何を、どの順番で理解するのか——再現できる道筋がありません。</b></p>
+          </div>
+          <div class="fig"><img src="img/intro2_toolbox.png" alt=""></div>
+        </div>
+        <div class="foot">
+          <p class="small">住民説明会は、開いてみるまで何が起きるか分からない。／当てるのは<b>用途地域の変更</b>——この二年で駅周辺<b>628区画中431区画</b>が告示し直されました。</p>
+        </div>
       </div>
 
-      <div class="pg">
-        <div class="kicker">何を測るのか</div>
-        <h2>合意率は測れません。<br>測れるのは「説明充足率」です。</h2>
-        <p>用途地域の変更に<b>同意要件はありません。</b>だから合意率は測れません。</p>
-        <p><b>説明充足率＝未回答の論点を一つも持たない棟が、影響を受ける棟の何棟か。</b>
-          条例から機械的に決まる<b>実測</b>で、推定の係数を1つも含みません。</p>
-        <p class="small">別に「納得率」を推定するプロトタイプも持っていますが、
-          同じ画面に混ぜると実測が推定に見えるため、分けてあります（右下のボタンから開けます）。</p>
-      </div>
-
-      <div class="pg">
-        <div class="kicker">なぜ「用途地域の変更」か／データの出所と限界</div>
-        <h2>いま動いているからです。</h2>
-        <p>さいたま市はこの2年で、駅周辺の<b>628区画のうち431区画</b>を告示し直しています。</p>
-        <p class="small">
-          <b>出所：</b>PLATEAU さいたま市 2025年度 CityGML（政府標準利用規約）／
-          埼玉県オープンデータ 高度地区（公共データ利用規約 PDL1.0・出典表示と加工明示のうえ再配布可・加工しています）／
-          e-Stat 令和2年国勢調査 小地域境界／さいたま市中高層建築物紛争防止条例／地理院タイル。<br>
-          <b>限界：</b>敷地境界のデータがありません（<code>uro:siteArea</code> は0件）。
-          建蔽率から逆算して建物の外周を膨らませた<b>推定</b>です。実際より説明対象が<b>少なく出ます。安全側ではありません。</b><br>
-          <b>この画面は推奨を出しません。</b>AIが住民の代わりに意見を言う仕組みでもありません。決めるのは市です。
-        </p>
-      </div>
-
-      <div class="pg">
-        <div class="kicker">この画面でできること</div>
-        <h2>3つです。</h2>
-        <ol>
-          <li><b>用途地域の境（黒白の線）を掴んで動かす。</b>両端の黒い球のあいだをドラッグします。</li>
-          <li><b>高さの上限を超える棟が赤く出る。</b>高度地区の絶対高さ（15m／20m）の板を突き抜けた棟＝既存不適格です。</li>
-          <li><b>市が説明する相手が決まる。</b>敷地境界から15m以内、高さの2倍かつ冬至日に日影が届く範囲、周辺住民——条例の層ごとに棟数が出ます。</li>
-        </ol>
-        <p class="small">PC・Chrome・マウス操作を前提に作っています。</p>
+      <!-- ===================== S3 ===================== -->
+      <div class="pg" data-t="0:49–1:28（A-3 ツマミ2つ・KPI2つ）">
+        <div class="kicker">何を回し、何を読むか ── ツマミ2つ・KPI2つ</div>
+        <h2>同意率と合意率は、逆に動く。<span class="sub">だから、KGIを先に決める。</span></h2>
+        <div class="body">
+          <div class="txt">
+            <div class="defs">
+              <div class="dr m"><em>1</em><b>回す：何を</b><span>自分の論点に答えがあるか。条例から機械的に決まる＝<b>係数ゼロ</b></span><i>実測</i><u>説明充足率</u><u class="v">0.0<small>%</small></u></div>
+              <div class="dr h"><em>2</em><b>回す：誰に</b><span>近隣は条例で個別説明の義務／周辺は媒体しだい。郵送で形式は満たせる＝<b>KGIにしない</b></span><i>半実測</i><u>到達率</u><u class="v">63.0<small>%</small></u></div>
+              <div class="dr e hi"><em>3</em><b>読む：賛成</b><span>届いて、かつ賛成。分母は全員＝<b>法令の分母</b>（都再法14条・区分所有法62条）。<b>越えなければ都市計画が動かない＝KGI</b></span><i>推定</i><u>同意率</u><u class="v">4.9<small>%</small></u></div>
+              <div class="dr e"><em>4</em><b>読む：黙認込み</b><span>同意率 ＋ <b>届かなかった人の黙認</b>＝世論・評判の数字。<b>法令に「棄権＝賛成」は無い</b></span><i>推定</i><u>合意率</u><u class="v">25.2<small>%</small></u></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot">
+          <p class="small"><b>周知を強めると、3は上がり 4は下がって、届けきると重なる。</b>個別通知まで届けると 同意率 4.9→<b>14.0%</b>・合意率 25.2→<b>14.7%</b>（差 20.3→0.7%＝黙認の量・q0=0.55は仮）。区分所有法63条4項＝無回答は「参加しない」と<b>みなす</b>。<br><b>「はじめる」のあとは <em>1</em>線を掴んで動かす → <em>2</em>高さの上限 → <em>3</em>想定回答。</b></p>
+        </div>
       </div>
 
     </div>
@@ -910,11 +973,11 @@
 <div id="consent-overlay">
   <div id="co-card">
     <div id="co-bar">
-      <b>納得率シミュレータ</b>
+      <b>同意率シミュレータ</b>
       <span id="co-ctx">—</span>
       <span id="co-close">× 地図に戻る</span>
     </div>
-    <iframe id="co-frame" title="納得率シミュレータ"></iframe>
+    <iframe id="co-frame" title="同意率シミュレータ"></iframe>
   </div>
 </div>
 
@@ -3957,7 +4020,7 @@ window.IndexEmbed = {
 
 /* =========================================================================
    ★導入オーバーレイ（2026-09-04 本人指示）
-   ・開いた瞬間に「この画面が何なのか」を5枚で説明する。発表では導入88秒の画面になる。
+   ・開いた瞬間に「この画面が何なのか」を3枚で説明する（2026-09-04 夜に5枚→3枚・S3＝ツマミ2つ/KPI2つ）。発表では導入88秒の画面になる。
    ・★地図の読み込みは止めない（裏で boot() が走る）。閉じた時点ですぐ操作できる。
    ・?intro=0 を付けると出ない（稽古・検証用）。キーボードの i で開き直せる。
    ・→／Space／Enter＝次へ、←＝戻る、Esc＝閉じる。
