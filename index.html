@@ -613,52 +613,52 @@
      ⚠ 文字はコーラル地の上に置かない（#2f4858 で 3.70:1＝AA未達）。白いカードの上に置く。 */
   #intro {
     position: fixed; inset: 0; z-index: 90; display: none;
-    background: #ff7675; padding: 24px;
+    background: rgba(28,42,52,.55); padding: 24px;
     align-items: center; justify-content: center;
   }
   #intro.on { display: flex; }
   #intro .card {
     background: #fff; color: #2f4858; border-radius: 14px;
-    width: min(860px, 100%); max-height: calc(100vh - 48px);
-    padding: 34px 40px 22px; box-sizing: border-box;
+    width: 80vw; height: 80vh; max-width: 100%; max-height: calc(100vh - 48px);
+    padding: 34px 46px 22px; box-sizing: border-box;
     display: flex; flex-direction: column; overflow: hidden;
     box-shadow: 0 18px 48px rgba(47,72,88,.28);
   }
   #intro .pages { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
   #intro .pg { display: none; }
   #intro .pg.on { display: block; }
-  #intro .kicker { font-size: 12px; color: #0059a8; font-weight: 700; letter-spacing: .04em; margin-bottom: 10px; }
-  #intro h2 { margin: 0 0 16px; font-size: 27px; line-height: 1.45; color: #2f4858; }
-  #intro h2 .lead { display: block; font-size: 34px; margin-bottom: 6px; }
-  #intro p { margin: 0 0 13px; font-size: 15.5px; line-height: 1.95; }
+  #intro .kicker { font-size: 13.5px; color: #0059a8; font-weight: 700; letter-spacing: .04em; margin-bottom: 10px; }
+  #intro h2 { margin: 0 0 18px; font-size: 31px; line-height: 1.45; color: #2f4858; }
+  #intro h2 .lead { display: block; font-size: 40px; margin-bottom: 6px; }
+  #intro p { margin: 0 0 15px; font-size: 18px; line-height: 1.95; }
   #intro b { color: #0059a8; }
   #intro ol { margin: 0 0 13px; padding-left: 0; list-style: none; counter-reset: st; }
   #intro ol li {
-    counter-increment: st; position: relative; padding: 9px 0 9px 46px;
-    font-size: 15.5px; line-height: 1.8; border-top: 1px solid #ffe4e0;
+    counter-increment: st; position: relative; padding: 11px 0 11px 52px;
+    font-size: 18px; line-height: 1.8; border-top: 1px solid #ffe4e0;
   }
   #intro ol li:first-child { border-top: 0; }
   #intro ol li::before {
-    content: counter(st); position: absolute; left: 4px; top: 9px;
-    width: 27px; height: 27px; border-radius: 50%; background: #ff7675; color: #fff;
-    font-size: 14px; font-weight: 700; text-align: center; line-height: 27px;
+    content: counter(st); position: absolute; left: 4px; top: 11px;
+    width: 31px; height: 31px; border-radius: 50%; background: #ff7675; color: #fff;
+    font-size: 16px; font-weight: 700; text-align: center; line-height: 31px;
   }
-  #intro .small { font-size: 12.5px; line-height: 1.85; color: #5b6470; }
+  #intro .small { font-size: 14px; line-height: 1.85; color: #5b6470; }
   #intro .bar {
     flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
     margin-top: 16px; padding-top: 14px; border-top: 1px solid #ffe4e0;
   }
   #intro .dots { display: flex; gap: 6px; margin-right: auto; }
-  #intro .dots i { width: 8px; height: 8px; border-radius: 50%; background: #ffd5d2; display: block; }
+  #intro .dots i { width: 9px; height: 9px; border-radius: 50%; background: #ffd5d2; display: block; }
   #intro .dots i.on { background: #ff7675; }
   #intro button {
-    font-family: inherit; font-size: 13.5px; padding: 8px 16px; border-radius: 7px; cursor: pointer;
+    font-family: inherit; font-size: 15px; padding: 9px 20px; border-radius: 7px; cursor: pointer;
     border: 1px solid #c9d3da; background: #fff; color: #2f4858;
   }
   #intro button.primary { background: #0059a8; border-color: #0059a8; color: #fff; font-weight: 700; }
   #intro button:hover { filter: brightness(.97); }
   #intro button[disabled] { opacity: .35; cursor: default; }
-  #intro .skip { font-size: 11.5px; color: #5b6470; background: none; border: 0; padding: 4px 6px; }
+  #intro .skip { font-size: 13px; color: #5b6470; background: none; border: 0; padding: 4px 6px; }
 
 </style>
 </head>
