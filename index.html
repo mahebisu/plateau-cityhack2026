@@ -281,6 +281,17 @@
   }
   /* ★2/3・3/4・4/5 は 75% と 80% が5%しか離れておらず、「3/4」「4/5」と横書きすると重なる。
      分数を縦に組む（分子／罫／分母）と幅が約18px→8pxになり、重ならない。 */
+  /* 説明充足率とは（ⓘ）：分数の式＋2行。文字に強弱（2026-09-05） */
+  #gauge-box h3 { font-size: 22px !important; margin-bottom: 14px !important; }
+  #gauge-box .gb-formula { display: flex; align-items: center; gap: 14px; margin: 6px 0 18px; }
+  #gauge-box .gb-lhs { font-size: 22px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  #gauge-box .gb-frac { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.3; }
+  #gauge-box .gb-num { font-size: 20px; font-weight: 700; color: var(--accent); padding: 0 8px 3px; border-bottom: 2px solid var(--ink); white-space: nowrap; }
+  #gauge-box .gb-den { font-size: 17px; font-weight: 600; color: var(--ink); padding: 3px 8px 0; white-space: nowrap; }
+  #gauge-box .gb-l1 { font-size: 16px; line-height: 1.6; margin: 0 0 6px; color: var(--ink); }
+  #gauge-box .gb-l1 b { color: var(--accent); }
+  #gauge-box .gb-l2 { font-size: 13.5px; line-height: 1.6; margin: 0; color: var(--sub); }
+  #gauge-box .gb-l2 b { color: var(--ink); }
   .frac { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.02; }
   .frac b { font-weight: 600; font-size: 9.5px; }
   .frac i { display: block; width: 8px; height: 1px; background: currentColor; margin: 1px 0; }
@@ -1432,13 +1443,13 @@
   <div id="gauge-box">
     <span id="gauge-close">×</span>
     <h3>説明充足率とは</h3>
-    <div class="meta">賛成率でも同意率でもありません。<b>答えていない論点が残っているかどうか</b>だけを数えています。</div>
-    <blockquote style="font-size:13px;line-height:1.9">
-      <b>説明充足率 ＝ 配る資料だけで疑問が全部つぶれる棟 ÷ 説明対象の棟</b>
-    </blockquote>
-    <p>聞きたいことは棟ごとに違います（<b>条例のどの号で説明対象になったか</b>で決まります。恣意的に選んでいません）。
-    <b>影響の大小ではなく「答えが載っているか」だけ</b>を数えています。賛否は測っていません。</p>
-    <p class="meta">2/3・3/4・4/5 は参照水準であり、用途地域変更の法定要件ではありません。どの水準を採るかは市が決めます。</p>
+    <!-- ★2026-09-05 本人指示：式は分数で・2行だけ・文字に強弱（intro を参考） -->
+    <div class="gb-formula">
+      <span class="gb-lhs">説明充足率 ＝</span>
+      <span class="gb-frac"><span class="gb-num">想定の疑問がすべて解ける棟</span><span class="gb-den">説明対象の棟</span></span>
+    </div>
+    <p class="gb-l1">どの疑問を持つかは、その棟が<b>条例のどの号で説明対象になったか</b>で決まります。</p>
+    <p class="gb-l2"><b>賛否は測りません。</b>2/3・3/4・4/5 は目安で、法定の要件ではありません。</p>
   </div>
 </div>
 
