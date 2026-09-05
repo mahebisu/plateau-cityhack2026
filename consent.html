@@ -303,7 +303,7 @@
           <div id="inner-l"></div><div id="inner-r"></div>
         </div>
         <div class="note" style="margin-top:8px" id="sens-sum">—</div>
-        <table style="margin-top:4px"><thead><tr><th>係数</th><th>下限</th><th>上限</th><th title="上限と下限の広がり。中央から ±この値。上限−下限はこの2倍">幅</th></tr></thead>
+        <table style="margin-top:4px"><thead><tr><th style="text-align:left">係数<small style="font-weight:400">（効きが大きい順・上位6／<span id="sens-n2">—</span>個）</small></th><th title="その係数を0.5倍にしたときと1.5倍にしたときの同意率（到達者分母）のうち低い方">下限</th><th title="同じく高い方">上限</th><th title="上限と下限の広がり。中央から ±この値。上限−下限はこの2倍">幅</th></tr></thead>
           <tbody id="sens"></tbody></table>
       </div>
 
@@ -629,7 +629,7 @@ const coefLabel = k => COEF_LABEL[k] ? COEF_LABEL[k] : "";
 const LAYER_WHY = { subject:"高度地区の絶対高さを超える", kinA:"外周からの実距離で減衰",
                     kinB:"冬至日7時刻のうち影に入る時刻数", shuu:"弱い負・媒体依存" };
 
-$("sens-n").textContent = M.SENS_KEYS.length;
+$("sens-n").textContent = M.SENS_KEYS.length; $("sens-n2").textContent = M.SENS_KEYS.length;
 
 /* --- コントロールの器 --- */
 Object.keys(M.BENEFIT).forEach(k => {
@@ -803,8 +803,8 @@ function render() {
   $("b-band").style.left = sn.lo * 100 + "%";
   $("b-band").style.width = (sn.hi - sn.lo) * 100 + "%";
   $("s-nat").textContent = "感度の幅 " + f1(sn.lo) + "% 〜 " + f1(sn.hi) + "%";
-  $("sens-sum").innerHTML = "係数を1つずつ±50%振ると、同意率（到達者分母）は <b>" + f1(sn.lo) + "% 〜 " + f1(sn.hi) +
-    "%</b> に広がります（同意率（到達者分母）のバーの薄い帯）。";
+  $("sens-sum").innerHTML = "いまの同意率（到達者分母）は <b>" + f1(e.nattoku) + "%</b>。係数を1つずつ±50%振ると <b>" + f1(sn.lo) + "% 〜 " + f1(sn.hi) +
+    "%</b> に広がります（バーの薄い帯）。各行＝その係数だけを0.5倍／1.5倍にし、他は据え置いたときの最小と最大。";
   $("sens").innerHTML = sn.rows.slice(0, 6).map(r =>
     "<tr><td style='text-align:left'><code>" + r.k + "</code> <span style='color:var(--sub);font-size:11.5px'>" +
     coefLabel(r.k) + "</span></td><td>" + f1(r.l) + "%</td><td>" +
