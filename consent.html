@@ -50,7 +50,7 @@
   #ref-box .ind { font-size:11.5px; background:#eef4fa; color:#2f4858; border-color:#b9d2e6; }
   #ref-box .to { margin:8px 0 2px; padding:8px 10px; background:#f5f8fb; border-left:3px solid #2f4858; border-radius:4px; }
   #ref-box .to p { margin:4px 0 0; }
-  #refbar .rb-lbl small { display:block; font-weight:400; font-size:9.5px; color:var(--sub); }
+  #refbar .rb-lbl small { display:block; font-weight:400; font-size:9px; color:var(--sub); }
 
   /* ---- 画面下に固定する帯 ---- */
   #refbar {
@@ -60,20 +60,23 @@
     box-shadow:0 -2px 10px rgba(20,30,40,.07);
   }
   #refbar .rb-lbl {
-    flex:0 0 auto; font-size:11px; font-weight:700; color:var(--sub);
-    line-height:1.3; letter-spacing:.02em; border-right:1px solid var(--line); padding-right:12px;
+    flex:0 0 auto; font-size:11px; font-weight:700; color:var(--sub); white-space:nowrap;
+    line-height:1.3; letter-spacing:.02em; border-right:1px solid var(--line); padding-right:10px;
   }
   #refbar #refs { flex:1 1 auto; display:flex; flex-wrap:wrap; gap:5px; min-width:0; }
   #refbar .refchip { margin:0; padding:4px 8px; }
   #refbar .rb-note { flex:0 0 auto; font-size:10.5px; color:var(--sub); line-height:1.45; }
-  /* ★禁忌の2行（2026-09-04 本人指示：カードから下帯へ集約） */
-  #refbar { flex-wrap:wrap; row-gap:4px; }
-  #refbar #rb-warn { flex:1 0 100%; font-size:10.5px; line-height:1.5; color:var(--sub);
-                     border-top:1px solid var(--line); padding-top:4px; }
-  /* チップの合計幅（max-content）で #refs が帯幅を超え、右の注記が次の行へ落ちるのを防ぐ（basis 0 で帯幅に収める） */
-  #refbar #refs { flex:1 1 0; }
+  /* ★下帯は1行（2026-09-05 本人指示）。チップ＝短い名前＋タグの1行。禁忌の2行は本文末尾 #page-caveat へ */
+  #refbar { flex-wrap:nowrap; padding:5px 12px; }
+  #refbar #refs { flex:1 1 0; flex-wrap:nowrap; gap:4px; overflow:hidden; }
+  #refbar .refchip { padding:3px 7px; white-space:nowrap; line-height:1.3; }
+  #refbar .refchip b { display:inline; font-size:11.5px; margin-right:4px; }
+  #refbar .refchip span { display:inline; }
+  #refbar .refchip .ind { margin:0 0 0 2px; font-size:9.5px; padding:0 4px; }
+  #page-caveat { margin:14px 0 0; padding:8px 12px; font-size:12px; color:var(--sub);
+                 border-top:1px solid var(--line); text-align:right; }
   /* 帯に隠れないよう本文の下を空ける */
-  .page { padding-bottom:164px; }  /* 下帯＝チップ2行＋注意2行で約150px（2026-09-04 実測） */
+  .page { padding-bottom:64px; }  /* 下帯＝1行 約40px（2026-09-05） */
   #ref-modal {
     position:fixed; inset:0; z-index:60; display:none; padding:24px;
     background:rgba(20,24,28,.45); align-items:center; justify-content:center;
@@ -352,6 +355,8 @@
       </div>
     </div>
   </div>
+  <!-- ★注記は下帯ではなく本文の一番下（2026-09-05 本人指示）。旧・禁忌2行を1文に -->
+  <div id="page-caveat">説明充足率以外は理論的予測であることに注意されたい。</div>
 </div>
 
 <!-- ★理論のよりどころは画面下の帯にまとめた（2026-08-24 本人指示）。
@@ -368,13 +373,8 @@
 </div>
 
 <footer id="refbar">
-  <div class="rb-lbl">理論の<br>よりどころ<br><small>タグ＝効く指標</small></div>
+  <div class="rb-lbl" title="6つの出典。タグ＝その出典が効く指標。クリックで「効く指標」「原典が言っていること」「使い方」「注意・限界」と原本リンク">理論のよりどころ<small>タグ＝効く指標・クリックで詳細</small></div>
   <div id="refs"></div>
-  <div class="rb-note" title="各ポップアップに「原典が言っていること」「このシミュレータでの使い方（係数名つき）」「画面のどこを触ると効くか」「注意・限界」の4節と、原本へのリンクが入っています。">クリックで<br>効く指標・使い方・原本</div>
-  <div id="rb-warn">
-    <b>思考実験装置であって予測装置ではない。この数値を理由に説明会を省略・縮小しない。</b><br>
-    属性別の挙動は統計的傾向で個人の予測ではない。<b>緑の説明充足率だけが条例から機械的に決まる実測。</b>
-  </div>
 </footer>
 
 <!-- 理論のよりどころのポップアップ。中身は REFS から流し込む。
@@ -397,7 +397,7 @@ const M = window.ConsentModel;
    ======================================================================= */
 const REFS = [
  { k:"hirose",
-   chip:"広瀬・大友(2014)", ind:["同意率","合意率"], sub:"賛成する確率の式そのもの",
+   chip:"広瀬・大友(2014)", short:"広瀬・大友 2014", ind:["同意率","合意率"], sub:"賛成する確率の式そのもの",
    title:"広瀬幸雄・大友章司（2014）市民参加型ごみ処理基本計画が市民に受け入れられ，行政への信頼を醸成するために何が必要か",
    cite:"『社会安全学研究』第4号 pp.43-50（関西大学社会安全学部）／査読論文・信頼度<b>最高</b>。津島市・選挙人名簿から無作為1,500名抽出 → 有効回答661 → 分析対象414、共分散構造分析（GFI=.93 CFI=.97 RMSEA=.05）",
    links:[["論文PDF（363KB）","https://www.kansai-u.ac.jp/Fc_ss/common/pdf/bulletin004_43.pdf"],
@@ -421,7 +421,7 @@ const REFS = [
          + "使えるのは<b>分散説明率と規定因の順位</b>まで。だから<b>係数は仮</b>で、感度分析で幅を出している。"] },
 
  { k:"elm",
-   chip:"ELM(2013)", ind:["同意率","合意率"], sub:"理解度で手続き↔内容の重みが動く",
+   chip:"ELM(2013)", short:"ELM 2013", ind:["同意率","合意率"], sub:"理解度で手続き↔内容の重みが動く",
    title:"尾花恭介・広瀬幸雄・藤井聡（2013）精緻化見込みモデルから考察したNIMBY型事業の受容に及ぼす手続き的公正さの影響",
    cite:"『土木学会論文集D3（土木計画学）』69巻4号 pp.267-275／査読論文・信頼度<b>高</b>",
    links:[["J-STAGE 論文ページ","https://www.jstage.jst.go.jp/article/jscejipm/69/4/69_267/_article/-char/ja"],
@@ -441,7 +441,7 @@ const REFS = [
    warn:["<b>gViz 0.35 / gEasy 0.15 / gStudy 0.10 は仮の値。</b>論文は「重みが動く」ことを示したが、動く量は与えていない。"] },
 
  { k:"bias",
-   chip:"参加者バイアス研究", ind:["同意率","合意率"], sub:"③で集め方を変えたときだけ動く",
+   chip:"参加者バイアス研究", short:"参加者バイアス", ind:["同意率","合意率"], sub:"③で集め方を変えたときだけ動く",
    title:"参加者バイアスと影響力バイアスの実証研究",
    cite:"ワークショップ実測＝『アクション・リサーチ』27(4)／土木学会論文集（WS発言量）／CiNii収録研究（広場活用型WS）／九州大学研究。"
         + "影響力差＝<b>科研費 22K05880「多様な主体が活躍できる地域づくりワークショップに関する研究」</b>（研究代表者 福與徳文・基盤研究(C)・2022-2025）／信頼度<b>高</b>",
@@ -465,7 +465,7 @@ const REFS = [
          "<code>voiceEqFace</code>／<code>voiceEqAsync</code> は仮の値。研究は「差が出る」ことを示したが、差の大きさは与えていない。"] },
 
  { k:"saitama",
-   chip:"令和5年度 さいたま市民意識調査", ind:["到達率","同意率","合意率"], sub:"媒体・制度認知・便益・黙認の実測値",
+   chip:"令和5年度 さいたま市民意識調査", short:"さいたま市民意識調査", ind:["到達率","同意率","合意率"], sub:"媒体・制度認知・便益・黙認の実測値",
    title:"令和5年度 さいたま市民意識調査（さいたま市 市長公室 秘書広報部 広聴課）",
    cite:"在住者調査＝満18歳以上・対象5,000人・<b>住民基本台帳に基づく層化多段無作為抽出</b>・郵送配布/回収・有効回収<b>2,215（44.3%）</b>。"
         + "在勤者調査＝対象2,000人・有効回収550（27.5%）／一次資料・信頼度<b>最高</b>",
@@ -492,7 +492,7 @@ const REFS = [
          "<code>q0 0.55</code>（未到達者の既定態度）は、定住意向85.2%と「特にない」38.6%からの<b>仮置き</b>。実測ではない。"] },
 
  { k:"yokohama",
-   chip:"横浜市 合意形成ガイド", ind:["説明充足率→同意率"], sub:"未回答の論点が損を大きく見せる割増",
+   chip:"横浜市 合意形成ガイド", short:"横浜市ガイド", ind:["説明充足率→同意率"], sub:"未回答の論点が損を大きく見せる割増",
    title:"横浜市『地区計画策定に向けての合意形成』（都市整備局・実務ガイド）",
    cite:"行政実務資料（一次）／信頼度<b>高</b>",
    links:[["ガイド本体 PDF","https://www.city.yokohama.lg.jp/kurashi/machizukuri-kankyo/toshiseibi/suishin/minnade/hakkoubutu/goui-guide.files/0103_20191017.pdf"],
@@ -513,7 +513,7 @@ const REFS = [
          "⚠ <b>t1〜t8 の根拠は一様ではない</b>（条例の条文そのものは t3・t4 の2つだけ）。論点の設計自体は再検討中。"] },
 
  { k:"kasuhara",
-   chip:"総務省 ハラスメント実態調査", ind:["対面対応"], sub:"同意率・到達率には効かない",
+   chip:"総務省 ハラスメント実態調査", short:"総務省調査", ind:["対面対応"], sub:"同意率・到達率には効かない",
    title:"総務省『地方公共団体における各種ハラスメントに関する職員アンケート調査結果』（2025-04-25 公表）",
    cite:"無作為抽出した388の都道府県・市区町村の一般行政部門の職員20,000人（常勤14,191／非常勤5,809）を対象、"
         + "<b>11,507人が回答</b>／一次資料・信頼度<b>最高</b>",
@@ -551,8 +551,8 @@ function refHTML(r) {
 (function buildRefs() {
   const box = document.getElementById("refs");
   box.innerHTML = REFS.map((r, i) =>
-    '<button class="refchip" data-i="' + i + '" title="効く指標：' + (r.ind || []).join("・") + '"><b>' + r.chip + "</b><span>"
-      + (r.ind || []).map(x => '<i class="ind">' + x + "</i>").join("") + r.sub + "</span></button>").join("");
+    '<button class="refchip" data-i="' + i + '" title="' + r.chip + "：" + r.sub + "（効く指標：" + (r.ind || []).join("・") + '）"><b>' + (r.short || r.chip) + "</b><span>"
+      + (r.ind || []).map(x => '<i class="ind">' + x + "</i>").join("") + "</span></button>").join("");
   const m = document.getElementById("ref-modal");
   box.addEventListener("click", e => {
     const b = e.target.closest(".refchip"); if (!b) return;
